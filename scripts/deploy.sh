@@ -52,8 +52,8 @@ for script in "$REPO_ROOT"/scripts/server/*; do
     < "$script"
 done
 
-# console.sh was folded into "mpm console".
-ssh "$HOST" "rm -f \"\$HOME/$REMOTE_SCRIPTS/console.sh\" && mkdir -p \"\$HOME/.local/bin\" && ln -sfn \"\$HOME/$REMOTE_SCRIPTS/mpm\" \"\$HOME/.local/bin/mpm\""
+# Remove scripts from earlier versions (console.sh, mpm-console.py, the console history).
+ssh "$HOST" "rm -f \"\$HOME/$REMOTE_SCRIPTS/console.sh\" \"\$HOME/$REMOTE_SCRIPTS/mpm-console.py\" \"\$HOME/$REMOTE_SCRIPTS/.console_history\" && mkdir -p \"\$HOME/.local/bin\" && ln -sfn \"\$HOME/$REMOTE_SCRIPTS/mpm\" \"\$HOME/.local/bin/mpm\""
 
 if [ "$RESTART" = 1 ]; then
   # %q-quote the pass-through options so they survive the remote shell.

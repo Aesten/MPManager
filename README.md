@@ -54,22 +54,17 @@ extension points and reflection instead, for example by swapping in its own lobb
 On the server, `mpm` (installed as `~/bannerlord/mpm`, linked from `~/.local/bin`):
 
 ```sh
-mpm console              # live log + type commands, with history and line editing (Ctrl-D to leave)
-mpm cmd mpm_lobby        # run one command and print its output
-mpm logs [-f] [-n 200]   # recent log lines, -f to follow (--raw: screen's full console log)
-mpm start [options]      # start detached; options go to run-server.sh
-mpm stop | restart | status
-mpm attach               # the raw screen session (Ctrl-A D to detach)
+mpm cmd <command>        # send a console command and print what it logged, e.g. mpm cmd mpm_lobby
+mpm logs [-f] [-n 100]   # recent log lines without noise, -f to follow; --all for everything
+mpm start | stop | restart | status
 ```
 
-`console` and `logs` read `~/bannerlord/mpmanager.log`, which MPManager writes as each line is printed:
-dated, without blank lines or keepalive noise. It holds every managed `Debug.Print` and console output;
-`server.log` (screen's copy of the console, `--raw`) also has the few lines the engine prints natively.
-Both are archived to `~/bannerlord/logs/` when the server starts.
-
-`mpm console` (`mpm-console.py`) keeps the prompt and what you're typing on the bottom line and prints
-log lines above it. Leave with Ctrl-D, Ctrl-C or `exit`. Commands go through `~/bannerlord/console.fifo`,
-so `echo "<command>" > ~/bannerlord/console.fifo` works too.
+Commands go through `~/bannerlord/console.fifo` (`echo "<command>" > ~/bannerlord/console.fifo` works
+too). Logs come from `~/bannerlord/mpmanager.log`, which MPManager writes as each line is printed: dated,
+no blank lines, no keepalive noise. `mpm logs` also hides routine lines listed in `NOISE` at the top of
+`scripts/server/mpm`. `server.log` is screen's raw copy of the console. Both logs are archived to
+`~/bannerlord/logs/` when the server starts. The server runs detached in screen; nothing prints to your
+terminal unless you ask for it.
 
 ## Test server
 

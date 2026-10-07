@@ -2,19 +2,15 @@
 # Controls the Bannerlord dedicated server on this machine.
 #
 # Usage: mpm <command> [args]
-#   console              live log + type commands, with history and line editing (Ctrl-D to leave)
-#   cmd <command...>     run one console command and print its output, e.g. mpm cmd mpm_lobby
-#   logs [-f] [-n N]     the last N (default 100) log lines, -f to follow; --raw for the full console log
-#   start [options]      start the server detached; options go to run-server.sh (e.g. --config x.txt)
-#   stop                 stop the server
-#   restart [options]    stop, then start
-#   status               is the server running?
-#   attach               the raw screen session (Ctrl-A D to detach)
+#   cmd <command...>     send a console command and print what it logged, e.g. mpm cmd mpm_lobby
+#   logs [-f] [-n N]     the last N (default 50) log lines without noise, -f to follow; --all: unfiltered
+#   start [options]      start the server in the background; options go to run-server.sh
+#   stop | restart | status
 #
 # Lives in ~/bannerlord/ next to run-server.sh, linked as ~/.local/bin/mpm; mpManager's scripts/deploy.sh
-# installs both. Commands reach the server through MPManager's command pipe (console.fifo), because the
-# server's own console input doesn't work on Linux. Logs come from mpmanager.log, which MPManager writes as
-# lines are printed (dated, filtered); server.log is screen's raw copy of the console.
+# installs both. Commands go through MPManager's command pipe (console.fifo), because the server's own
+# console input doesn't work on Linux. Logs come from mpmanager.log, which MPManager writes as lines are
+# printed; server.log is screen's raw copy of the console, for anything missing there.
 
 set -uo pipefail
 
@@ -23,60 +19,65 @@ SELF="$(readlink -f "${BASH_SOURCE[0]}")"
 SCRIPT_DIR="$(dirname "$SELF")"
 RUN_SERVER="$SCRIPT_DIR/run-server.sh"
 LOG_FILE="$SCRIPT_DIR/mpmanager.log"
-RAW_LOG_FILE="$SCRIPT_DIR/server.log"
 COMMAND_FIFO="$SCRIPT_DIR/console.fifo"
-SESSION="bannerlord"
 SERVER_PATTERN="^dotnet TaleWorlds.Starter.DotNetCore.Linux.dll"
 
+# Lines "mpm logs" and "mpm cmd" hide (extended regexes). Add more as needed.
+NOISE=(
+  'ClientRestSessionTask::'                   # lobby request bookkeeping
+  'Http post request\('                       # lobby request retries that succeeded
+  '^[^ ]+ [^ ]+ (opening|Loading xml file|Loading assembly|Assembly load result|Loading localized text)'
+  '^[^ ]+ [^ ]+ (Searching |Found [0-9]+ )'   # startup scans
+  'HasSpawnedAgentVisuals = false'            # per-player network sync
+  '^[^ ]+ [^ ]+ (human sending|agent not sending|agents sending end)'
+  '^[^ ]+ [^ ]+ peer: .* index: [0-9]+ name: '
+  "Can't send the info of|isDisconnectedPeer:|networkPeer\.|peer == networkPeer"
+)
+
 usage () {
-  sed -n '4,13p' "$SELF" | sed 's/^# \{0,1\}//'
+  sed -n '4,9p' "$SELF" | sed 's/^# \{0,1\}//'
 }
 
-# For server.log: the engine ends every line with CR CR LF plus an empty line; strip both. -u: unbuffered.
-clean () {
-  sed -u -e 's/\r//g' -e '/^[[:space:]]*$/d'
-}
-
-# Writing to the pipe blocks until the server reads it; give up if it isn't reading.
-send () {
-  if ! timeout 3 bash -c 'printf "%s\n" "$1" > "$2"' _ "$1" "$COMMAND_FIFO"; then
-    echo "!! Server is not reading commands (not running, or started without MPManager)." >&2
-    return 1
-  fi
+filter () {
+  grep --line-buffered -a -v -E -f <(printf '%s\n' "${NOISE[@]}")
 }
 
 command="${1:-}"
 [ $# -gt 0 ] && shift
 case "$command" in
-  console)
-    exec python3 "$SCRIPT_DIR/mpm-console.py"
-    ;;
   cmd)
     [ $# -gt 0 ] || { echo "Usage: mpm cmd <command...>" >&2; exit 1; }
     before=$(stat -c %s "$LOG_FILE" 2>/dev/null || echo 0)
-    send "$*" || exit 1
+    # Writing blocks until the server reads the pipe; give up if it isn't reading.
+    if ! timeout 3 bash -c 'printf "%s\n" "$1" > "$2"' _ "$*" "$COMMAND_FIFO"; then
+      echo "Server is not reading commands (not running, or started without MPManager)." >&2
+      exit 1
+    fi
     sleep 1
     # Everything logged since, from the echo of this command on.
-    tail -c +"$((before + 1))" "$LOG_FILE" | sed -n '/\[MPManager\] > /,$p' | head -n 60
+    tail -c +"$((before + 1))" "$LOG_FILE" | sed -n '/\[MPManager\] > /,$p' | filter | head -n 60
     ;;
   logs)
     follow=""
-    lines=100
-    raw=0
+    lines=50
+    all=0
     while [ $# -gt 0 ]; do
       case "$1" in
         -f) follow="-F" ;;
         -n) lines="${2:?-n needs a number}"; shift ;;
-        --raw) raw=1 ;;
+        --all) all=1 ;;
         *) echo "Unknown option: $1" >&2; exit 1 ;;
       esac
       shift
     done
-    if [ "$raw" = 1 ]; then
-      # Every message is followed by a blank line, so read twice as many.
-      tail -n $((lines * 2)) $follow "$RAW_LOG_FILE" | clean
-    else
+    if [ "$all" = 1 ]; then
       tail -n "$lines" $follow "$LOG_FILE"
+    else
+      # Filter first, then take the last N, so N counts shown lines; then follow new lines.
+      filter < "$LOG_FILE" | tail -n "$lines"
+      if [ -n "$follow" ]; then
+        tail -n 0 -F "$LOG_FILE" 2>/dev/null | filter
+      fi
     fi
     ;;
   start)
@@ -90,9 +91,6 @@ case "$command" in
     ;;
   status)
     if pgrep -f "$SERVER_PATTERN" >/dev/null; then echo "Server is running."; else echo "Server is not running."; fi
-    ;;
-  attach)
-    screen -r "$SESSION"
     ;;
   ""|-h|--help|help)
     usage
