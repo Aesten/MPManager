@@ -11,7 +11,9 @@ public class MPManagerSubModule : MBSubModuleBase
     protected override void OnSubModuleLoad()
     {
         base.OnSubModuleLoad();
+        LogFilter.Install();
         ConsoleCommands.Register();
+        CommandInput.Start();
         Log("Loaded.");
     }
 
@@ -19,6 +21,7 @@ public class MPManagerSubModule : MBSubModuleBase
     protected override void OnApplicationTick(float dt)
     {
         base.OnApplicationTick(dt);
+        CommandInput.Tick();
         if (_lobbyReconnectFailed)
         {
             return;

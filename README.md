@@ -18,7 +18,15 @@ for the reconnect. If the automated rotation tried to start a battle during the 
 is started once the server is registered again. Before the first registration (`start_game`), the
 vanilla shutdown still applies.
 
-Console commands (type `list` for all commands, `<command> ?` for a description):
+**A working console.** On the Linux server, lines typed into the server's own console are echoed but
+never executed. MPManager reads commands from a named pipe instead (`~/bannerlord/console.fifo`, created
+by `run-server.sh`) and runs them exactly like console input, so options, the game's commands and the
+`mpm_*` commands all work. See [Controlling the server](#controlling-the-server).
+
+**Less log spam.** The lobby keepalive (four lines every 2 s, which was about a third of the log) is
+filtered out. Lobby retries and failures still show.
+
+MPManager's console commands (`list` shows all commands, `<command> ?` describes one):
 
 | Command | Effect |
 |---|---|
@@ -40,6 +48,23 @@ server runs on. The module only loads on custom dedicated servers (`DedicatedSer
 segfaults while detecting the platform (`DynDll.OpenLibrary` in `PlatformDetection`), and the
 engine's signal handler takes the process down. So MPManager changes game behaviour through public
 extension points and reflection instead, for example by swapping in its own lobby session handler.
+
+## Controlling the server
+
+`scripts/mpm` runs on this machine and controls the test server over ssh:
+
+```sh
+scripts/mpm console              # live log + type commands, with history and line editing (Ctrl-D to leave)
+scripts/mpm cmd mpm_lobby        # run one command and print its output
+scripts/mpm logs [-f] [-n 200]   # recent log lines, -f to follow
+scripts/mpm start [options]      # start detached; options go to run-server.sh
+scripts/mpm stop | restart | status
+scripts/mpm attach               # the raw screen session (Ctrl-A D to detach)
+scripts/mpm deploy [--restart]   # build and install the module and server scripts
+```
+
+`console` and `logs` hide the engine's blank lines. On the server itself, `~/bannerlord/console.sh` is the
+same console, and `echo "<command>" > ~/bannerlord/console.fifo` sends a single command.
 
 ## Test server
 
@@ -68,19 +93,22 @@ scripts/deploy.sh --restart      # ...then restart the server
 
 ## First test
 
-This build hasn't run on the server yet. To check it:
+To check a build:
 
 1. `scripts/deploy.sh --restart` (installs the module and `run-server.sh`, then restarts the server).
 2. In the log, look for `[MPManager] Loaded.`, then `[MPManager] Watching the lobby connection.`
 3. After `start_game`: `[MPManager] Game registered with the lobby...`, and `mpm_lobby` reports
    `RegisteredGame`.
-4. Join the server, then run `mpm_lobby_disconnect`. Expected: no shutdown countdown,
+4. Join the server, then run `scripts/mpm cmd mpm_lobby_disconnect`. Expected: no shutdown countdown,
    `Reconnecting to the lobby in 5 s`, then `Reconnected to the lobby`. You stay in the game
    throughout, and a second player can join afterwards.
 
+Steps 1-3, and step 4 without a player connected, passed on 2026-10-07: the server re-registered
+about 6 s after the disconnect. Staying in the game, and joining afterwards, still need a player.
+
 ## Planned
 
-- Logging: timestamps, filtering the lobby keepalive lines, a log file.
+- Logging: a clean log file of its own with dates, instead of relying on screen's log.
 - Server control commands, from the console and from admin chat: per-mode profiles (Skirmish,
   Battle) with their own map pools, map/mode/faction switching, a per-team player cap with overflow
   to spectators, holding warmup, adding and removing bots, kick and ban.

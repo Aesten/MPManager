@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Builds MPManager and installs it on the test server, along with run-server.sh.
+# Builds MPManager and installs it on the test server, along with the server scripts (scripts/server/:
+# run-server.sh, console.sh) in ~/bannerlord/.
 #
 # Usage: scripts/deploy.sh [--no-build] [--restart [-- <run-server.sh options>]]
 #   --no-build  copy the existing dist/ output without rebuilding
@@ -45,9 +46,12 @@ echo "Installing module to $HOST:~/$REMOTE_DS/Modules/MPManager"
 tar -C "$REPO_ROOT/dist/Modules" -cf - MPManager \
   | ssh "$HOST" "cd \"\$HOME/$REMOTE_DS/Modules\" && rm -rf MPManager && tar -xf -"
 
-echo "Installing run-server.sh to $HOST:~/$REMOTE_SCRIPTS/"
-ssh "$HOST" "mkdir -p \"\$HOME/$REMOTE_SCRIPTS\" && cat > \"\$HOME/$REMOTE_SCRIPTS/run-server.sh\" && chmod +x \"\$HOME/$REMOTE_SCRIPTS/run-server.sh\"" \
-  < "$REPO_ROOT/scripts/server/run-server.sh"
+for script in "$REPO_ROOT"/scripts/server/*.sh; do
+  name="$(basename "$script")"
+  echo "Installing $name to $HOST:~/$REMOTE_SCRIPTS/"
+  ssh "$HOST" "mkdir -p \"\$HOME/$REMOTE_SCRIPTS\" && cat > \"\$HOME/$REMOTE_SCRIPTS/$name\" && chmod +x \"\$HOME/$REMOTE_SCRIPTS/$name\"" \
+    < "$script"
+done
 
 if [ "$RESTART" = 1 ]; then
   # %q-quote the pass-through options so they survive the remote shell.

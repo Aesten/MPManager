@@ -25,6 +25,8 @@ SERVER_BIN="$DS_DIR/bin/Linux64_Shipping_Server"
 TOKEN_FILE="$SCRIPT_DIR/token.txt"
 LOG_FILE="$SCRIPT_DIR/server.log"
 LOG_ARCHIVE="$SCRIPT_DIR/logs"
+# Commands written to this named pipe are run by MPManager (the server's own console input doesn't work on Linux).
+COMMAND_FIFO="$SCRIPT_DIR/console.fifo"
 SESSION="bannerlord"
 PORT=7210
 TICKRATE=240
@@ -96,6 +98,7 @@ if [ "$INNER" = 1 ]; then
   # The server picks each module's bin/<folder> from its working directory's name,
   # so it has to run from inside Linux64_Shipping_Server.
   cd "$SERVER_BIN"
+  export MPM_CONSOLE_FIFO="$COMMAND_FIFO"
   exec dotnet TaleWorlds.Starter.DotNetCore.Linux.dll \
     "_MODULES_*${MODULES}*_MODULES_" \
     /dedicatedcustomserverconfigfile "$CONFIG" \
@@ -114,6 +117,10 @@ if [ "$VANILLA" = 0 ] && [ ! -f "$DS_DIR/Modules/MPBalancer/bin/Linux64_Shipping
   echo "MPBalancer is not installed in $DS_DIR/Modules (run mpbalancer's scripts/deploy.sh, or use --vanilla)." >&2
   exit 1
 fi
+if [ ! -p "$COMMAND_FIFO" ]; then
+  rm -f "$COMMAND_FIFO"
+  mkfifo "$COMMAND_FIFO"
+fi
 if session_running || server_process_running; then
   echo "A server is already running (screen -r $SESSION to attach, or $0 --stop)." >&2
   exit 1
@@ -129,9 +136,14 @@ if [ -f "$LOG_FILE" ]; then
   mv "$LOG_FILE" "$LOG_ARCHIVE/server-$(date -r "$LOG_FILE" +%Y%m%d-%H%M%S).log"
   ls -1t "$LOG_ARCHIVE"/server-*.log | tail -n +21 | xargs -r rm -f
 fi
+# screen flushes its log file only every 10 s by default; flush every second so the log (and console.sh)
+# keep up with the server. -c replaces ~/.screenrc for this session only.
+SCREENRC="$SCRIPT_DIR/.screenrc"
+printf 'logfile flush 1
+' > "$SCREENRC"
 if [ "$DETACH" = 1 ]; then
-  screen -L -Logfile "$LOG_FILE" -dmS "$SESSION" bash "$SELF" "${INNER_ARGS[@]}"
+  screen -c "$SCREENRC" -L -Logfile "$LOG_FILE" -dmS "$SESSION" bash "$SELF" "${INNER_ARGS[@]}"
   echo "Server starting in screen session '$SESSION' (modules: $MODULES, config: $CONFIG, tickrate: $TICKRATE). Log: $LOG_FILE"
 else
-  screen -L -Logfile "$LOG_FILE" -S "$SESSION" bash "$SELF" "${INNER_ARGS[@]}"
+  screen -c "$SCREENRC" -L -Logfile "$LOG_FILE" -S "$SESSION" bash "$SELF" "${INNER_ARGS[@]}"
 fi
