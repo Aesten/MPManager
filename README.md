@@ -32,13 +32,14 @@ dotnet build src/MPManager -c Release
 ```
 
 This compiles against the local Dedicated Server install's DLLs (override with `-p:DSDir="..."`)
-and writes the module to `dist/Modules/MPManager/`: `SubModule.xml`, plus `MPManager.dll` and
-`0Harmony.dll` in both `bin/Linux64_Shipping_Server` and `bin/Win64_Shipping_Server`.
+and writes the module to `dist/Modules/MPManager/`: `SubModule.xml`, plus `MPManager.dll` in both
+`bin/Linux64_Shipping_Server` and `bin/Win64_Shipping_Server`. It targets `net6.0`, the runtime the
+server runs on. The module only loads on custom dedicated servers (`DedicatedServerType` `custom`).
 
-It targets `net6.0`, the runtime the server runs on, because Harmony
-([Lib.Harmony](https://github.com/pardeike/Harmony)) has no netstandard2.0 build. `SubModule.xml`
-lists `0Harmony.dll` under `<Assemblies>`, so the game loads it from the module folder before
-`MPManager.dll`. The module only loads on custom dedicated servers (`DedicatedServerType` `custom`).
+**No Harmony.** Harmony 2.3.6 crashed the Linux server on its first patch: its MonoMod backend
+segfaults while detecting the platform (`DynDll.OpenLibrary` in `PlatformDetection`), and the
+engine's signal handler takes the process down. So MPManager changes game behaviour through public
+extension points and reflection instead, for example by swapping in its own lobby session handler.
 
 ## Test server
 
@@ -70,11 +71,9 @@ scripts/deploy.sh --restart      # ...then restart the server
 This build hasn't run on the server yet. To check it:
 
 1. `scripts/deploy.sh --restart` (installs the module and `run-server.sh`, then restarts the server).
-2. In the log, look for `[MPManager] Loaded (Harmony ...)`. A `Failed to install patches` line
-   means Harmony doesn't work on the server, which needs fixing before anything else.
-   The game may also log a failed attempt to load `0Harmony.dll` from the server's own bin folder;
-   that's expected as long as the `Loaded` line follows.
-3. After `start_game`, `mpm_lobby` should report `RegisteredGame`.
+2. In the log, look for `[MPManager] Loaded.`, then `[MPManager] Watching the lobby connection.`
+3. After `start_game`: `[MPManager] Game registered with the lobby...`, and `mpm_lobby` reports
+   `RegisteredGame`.
 4. Join the server, then run `mpm_lobby_disconnect`. Expected: no shutdown countdown,
    `Reconnecting to the lobby in 5 s`, then `Reconnected to the lobby`. You stay in the game
    throughout, and a second player can join afterwards.

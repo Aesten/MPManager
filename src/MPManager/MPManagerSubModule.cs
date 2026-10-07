@@ -1,5 +1,4 @@
 using System;
-using HarmonyLib;
 using TaleWorlds.Library;
 using TaleWorlds.MountAndBlade;
 
@@ -7,30 +6,33 @@ namespace MPManager;
 
 public class MPManagerSubModule : MBSubModuleBase
 {
-    private static Harmony _harmony;
+    private static bool _lobbyReconnectFailed;
 
     protected override void OnSubModuleLoad()
     {
         base.OnSubModuleLoad();
-        try
-        {
-            _harmony = new Harmony("mpmanager");
-            LobbyReconnect.Install(_harmony);
-            ConsoleCommands.Register();
-            Log("Loaded (Harmony " + typeof(Harmony).Assembly.GetName().Version + ").");
-        }
-        catch (Exception e)
-        {
-            // Never take the server down over our own setup; it just runs without our patches.
-            Log("Failed to install patches, running without them: " + e);
-        }
+        ConsoleCommands.Register();
+        Log("Loaded.");
     }
 
     // Runs every frame, in missions and between them, on the main thread.
     protected override void OnApplicationTick(float dt)
     {
         base.OnApplicationTick(dt);
-        LobbyReconnect.Tick();
+        if (_lobbyReconnectFailed)
+        {
+            return;
+        }
+        try
+        {
+            LobbyReconnect.Tick();
+        }
+        catch (Exception e)
+        {
+            // Never take the server down over our own logic; switch the feature off instead.
+            _lobbyReconnectFailed = true;
+            Log("Lobby reconnect failed and is now off: " + e);
+        }
     }
 
     internal static void Log(string message)

@@ -16,10 +16,6 @@
       <Name value="MPManager"/>
       <DLLName value="MPManager.dll"/>
       <SubModuleClassType value="MPManager.MPManagerSubModule"/>
-      <!-- Loaded from this module's bin folder before MPManager.dll. -->
-      <Assemblies>
-        <Assembly value="0Harmony.dll"/>
-      </Assemblies>
       <Tags>
         <!-- "custom": load on custom (listed) dedicated servers only, never on a game client. -->
         <Tag key="DedicatedServerType" value="custom"/>

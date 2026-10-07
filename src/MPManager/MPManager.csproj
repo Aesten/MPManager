@@ -1,8 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <!-- The Dedicated Server runs on .NET 6 (see its *.runtimeconfig.json). Harmony has no
-         netstandard2.0 build, so unlike MPBalancer this targets net6.0 directly. -->
+    <!-- The Dedicated Server runs on .NET 6 (see its *.runtimeconfig.json). -->
     <TargetFramework>net6.0</TargetFramework>
     <CheckEolTargetFramework>false</CheckEolTargetFramework>
     <LangVersion>latest</LangVersion>
@@ -17,13 +16,7 @@
 
     <ModuleDir>$(MSBuildThisFileDirectory)..\..\dist\Modules\MPManager\</ModuleDir>
     <GenerateDependencyFile>false</GenerateDependencyFile>
-    <!-- Class libraries don't copy package DLLs by default; we need 0Harmony.dll in the module. -->
-    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
   </PropertyGroup>
-
-  <ItemGroup>
-    <PackageReference Include="Lib.Harmony" Version="2.3.6" />
-  </ItemGroup>
 
   <ItemGroup>
     <Reference Include="$(DSBin)\TaleWorlds.Core.dll" Private="false" />
@@ -41,13 +34,12 @@
     <Reference Include="$(DSBin)\TaleWorlds.PlayerServices.dll" Private="false" />
   </ItemGroup>
 
-  <!-- Assembles dist/Modules/MPManager from the build output. Only these files are shipped:
-       Harmony's System.Text.Json dependency is already part of .NET 6.
+  <!-- Assembles dist/Modules/MPManager from the build output.
        The server loads module DLLs from bin/<name of its working directory>, which is
        Linux64_Shipping_Server on Linux and Win64_Shipping_Server on Windows. Ship both. -->
   <Target Name="AssembleModule" AfterTargets="Build">
     <ItemGroup>
-      <ModuleBinFile Include="$(OutDir)$(AssemblyName).dll;$(OutDir)$(AssemblyName).pdb;$(OutDir)0Harmony.dll" />
+      <ModuleBinFile Include="$(OutDir)$(AssemblyName).dll;$(OutDir)$(AssemblyName).pdb" />
     </ItemGroup>
     <RemoveDir Directories="$(ModuleDir)" />
     <Copy SourceFiles="$(MSBuildThisFileDirectory)..\..\module\SubModule.xml" DestinationFolder="$(ModuleDir)" />

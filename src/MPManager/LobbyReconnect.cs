@@ -1,7 +1,6 @@
 using System;
 using System.Reflection;
 using System.Threading.Tasks;
-using HarmonyLib;
 using TaleWorlds.Engine;
 using TaleWorlds.Library;
 using TaleWorlds.MountAndBlade;
@@ -13,14 +12,19 @@ namespace MPManager;
 
 // Keeps a registered custom server running when its connection to TaleWorlds' lobby drops.
 //
-// Vanilla, CustomBattleServer is built with autoReconnect: false, and DedicatedCustomGameServerHandler
-// answers OnDisconnected/OnCantConnect with Module.ShutDownWithDelay(20). A keepalive request failing
-// 5 retries is enough to shut the server down mid-match. Players already in the game talk to the server
-// directly; only new joins go through the lobby.
+// Vanilla, CustomBattleServer is built with autoReconnect: false, and its session handler
+// (DedicatedCustomGameServerHandler) answers OnDisconnected/OnCantConnect with Module.ShutDownWithDelay(20).
+// A keepalive request failing 5 retries is enough to shut the server down mid-match. Players already in the
+// game talk to the server directly; only new joins go through the lobby.
 //
-// Once a game has been registered, this skips that shutdown, reconnects with the arguments of the original
-// Connect call, and registers the game again with the arguments of the last RegisterGame call (updated to the
-// current game type, map and player cap). Before the first registration, the vanilla shutdown still applies.
+// CustomBattleServer only talks to its handler through ICustomBattleServerSessionHandler, so we swap in a
+// SessionHandlerWrapper that passes everything through except those two callbacks. Once a game has been
+// registered, a lost connection is handled here instead: reconnect with the arguments the game's own Connect
+// call stored, then register the game again the way DedicatedCustomServerIntermissionManagerHandler.OnGameStart
+// does, with the current game type, map and player cap. Before the first registration, the vanilla shutdown
+// still applies.
+//
+// No Harmony: its MonoMod backend segfaults inside the Linux server process while detecting the platform.
 //
 // The lobby callbacks only raise a flag; all work happens in Tick, on the main thread.
 internal static class LobbyReconnect
@@ -37,80 +41,45 @@ internal static class LobbyReconnect
     private const double MaxRetryDelaySeconds = 60;
     private const double LoginTimeoutSeconds = 60;
 
-    private static CustomBattleServer _server;
+    private static readonly FieldInfo HandlerField = typeof(CustomBattleServer).GetField("_handler", BindingFlags.Instance | BindingFlags.NonPublic);
 
-    // Arguments of the latest RegisterGame call, and of the latest one that succeeded.
-    private static object[] _pendingRegisterArgs;
-    private static object[] _registerArgs;
+    private static CustomBattleServer _server;
+    private static volatile bool _gameRegistered;
+    private static volatile bool _connectionLost;
 
     private static Phase _phase;
     private static DateTime _deadline;
     private static double _retryDelay = FirstRetryDelaySeconds;
     private static int _attempt;
-
-    private static volatile bool _connectionLost;
     private static Task _registerTask;
 
-    public static void Install(Harmony harmony)
+    // Called by SessionHandlerWrapper, possibly off the main thread. True: handled here, skip the vanilla shutdown.
+    public static bool OnConnectionLost()
     {
-        InterfaceMapping map = typeof(DedicatedCustomGameServerHandler).GetInterfaceMap(typeof(ICustomBattleServerSessionHandler));
-        HarmonyMethod skipShutdown = new HarmonyMethod(typeof(LobbyReconnect), nameof(SkipShutdownPrefix));
-        int patched = 0;
-        for (int i = 0; i < map.InterfaceMethods.Length; i++)
+        if (!_gameRegistered)
         {
-            string name = map.InterfaceMethods[i].Name;
-            if (name == nameof(ICustomBattleServerSessionHandler.OnDisconnected) || name == nameof(ICustomBattleServerSessionHandler.OnCantConnect))
-            {
-                harmony.Patch(map.TargetMethods[i], prefix: skipShutdown);
-                patched++;
-            }
-        }
-        if (patched != 2)
-        {
-            throw new InvalidOperationException("Expected 2 lobby shutdown handlers, found " + patched + ".");
-        }
-
-        MethodInfo registerGame = AccessTools.Method(typeof(CustomBattleServer), nameof(CustomBattleServer.RegisterGame), new[]
-        {
-            typeof(int), typeof(string), typeof(string), typeof(string), typeof(int), typeof(string), typeof(string),
-            typeof(int), typeof(string), typeof(string), typeof(string), typeof(int), typeof(string)
-        }) ?? throw new InvalidOperationException("CustomBattleServer.RegisterGame not found.");
-        harmony.Patch(registerGame, prefix: new HarmonyMethod(typeof(LobbyReconnect), nameof(CaptureRegisterGamePrefix)));
-    }
-
-    // Prefix of DedicatedCustomGameServerHandler's OnDisconnected and OnCantConnect.
-    private static bool SkipShutdownPrefix()
-    {
-        if (_registerArgs == null)
-        {
-            return true; // never registered a game: vanilla shutdown
+            return false;
         }
         _connectionLost = true;
-        return false;
-    }
-
-    // Prefix of CustomBattleServer.RegisterGame (the full overload, which the short one calls).
-    private static void CaptureRegisterGamePrefix(CustomBattleServer __instance, object[] __args)
-    {
-        _server = __instance;
-        _pendingRegisterArgs = (object[])__args.Clone();
+        return true;
     }
 
     public static void Tick()
     {
-        if (_server == null)
+        if (_server == null && !TryAttach())
         {
             return;
         }
-        if (_phase == Phase.Idle && _pendingRegisterArgs != null && _server.CurrentState == CustomBattleServer.State.RegisteredGame)
+        if (!_gameRegistered && _server.CurrentState == CustomBattleServer.State.RegisteredGame)
         {
-            _registerArgs = _pendingRegisterArgs;
+            _gameRegistered = true;
+            MPManagerSubModule.Log("Game registered with the lobby; a lost lobby connection will now be reconnected instead of shutting the server down.");
         }
 
         if (_connectionLost)
         {
             _connectionLost = false;
-            OnConnectionLost();
+            HandleConnectionLost();
         }
 
         switch (_phase)
@@ -150,7 +119,28 @@ internal static class LobbyReconnect
         }
     }
 
-    private static void OnConnectionLost()
+    // Wraps the lobby client's session handler once the game has created both.
+    private static bool TryAttach()
+    {
+        CustomBattleServer server = DedicatedCustomServerSubModule.Instance?.DedicatedCustomGameServer;
+        if (server == null || HandlerField == null)
+        {
+            return false;
+        }
+        if (!(HandlerField.GetValue(server) is ICustomBattleServerSessionHandler handler))
+        {
+            return false; // Connect hasn't run yet
+        }
+        if (!(handler is SessionHandlerWrapper))
+        {
+            HandlerField.SetValue(server, new SessionHandlerWrapper(handler));
+        }
+        _server = server;
+        MPManagerSubModule.Log("Watching the lobby connection.");
+        return true;
+    }
+
+    private static void HandleConnectionLost()
     {
         switch (_phase)
         {
@@ -184,15 +174,14 @@ internal static class LobbyReconnect
         MPManagerSubModule.Log("Reconnect attempt " + _attempt + ": connecting to the lobby.");
         try
         {
-            // The same arguments DedicatedCustomServerIntermissionManagerHandler passed at startup, as stored by Connect.
-            Traverse server = Traverse.Create(_server);
+            // The same arguments the game passed at startup, as stored by CustomBattleServer.Connect.
             _server.Connect(
-                server.Field("_handler").GetValue<ICustomBattleServerSessionHandler>(),
-                server.Field("_authToken").GetValue<string>(),
-                server.Field("_isSinglePlatformServer").GetValue<bool>(),
+                (ICustomBattleServerSessionHandler)HandlerField.GetValue(_server),
+                GetField<string>("_authToken"),
+                GetField<bool>("_isSinglePlatformServer"),
                 Utilities.GetModulesNames(),
-                server.Field("_allowsOptionalModules").GetValue<bool>(),
-                !server.Field("_useTimeoutTimer").GetValue<bool>());
+                GetField<bool>("_allowsOptionalModules"),
+                !GetField<bool>("_useTimeoutTimer"));
             _phase = Phase.Connecting;
             _deadline = DateTime.UtcNow.AddSeconds(LoginTimeoutSeconds);
         }
@@ -205,27 +194,31 @@ internal static class LobbyReconnect
 
     private static void StartRegister()
     {
-        // Parameters: gameDefinitionId, gameModule, gameType, serverName, maxPlayerCount, scene, uniqueSceneId,
-        // port, region, gamePassword, adminPassword, permission, overriddenIP. Passwords were already hashed by
-        // start_game, so they are passed on as stored.
-        object[] a = (object[])_registerArgs.Clone();
+        // Mirrors ServerSideIntermissionManager.StartGameAux + DedicatedCustomServerIntermissionManagerHandler.OnGameStart.
+        // The passwords were already hashed by start_game and are passed on as stored.
+        GameStartupInfo startup = TaleWorlds.MountAndBlade.Module.CurrentModule.StartupInfo;
         string gameType = MultiplayerOptions.OptionType.GameType.GetStrValue();
         string map = MultiplayerOptions.OptionType.Map.GetStrValue();
-        MultiplayerGameTypeInfo gameTypeInfo = MultiplayerGameTypes.GetGameTypeInfo(gameType);
-        if (gameTypeInfo != null)
-        {
-            a[1] = gameTypeInfo.GameModule;
-            a[2] = gameType;
-        }
-        a[4] = MultiplayerOptions.OptionType.MaxNumberOfPlayers.GetIntValue();
-        a[5] = map;
-        a[6] = Utilities.TryGetUniqueIdentifiersForScene(map, out UniqueSceneId ids) ? ids.Serialize() : null;
+        string uniqueSceneId = Utilities.TryGetUniqueIdentifiersForScene(map, out UniqueSceneId ids) ? ids.Serialize() : null;
+        string region = startup.PlayerHostedDedicatedServer ? "USER" : startup.ServerRegion;
 
-        MPManagerSubModule.Log("Registering the game again (" + a[2] + " on " + a[5] + ").");
+        MPManagerSubModule.Log("Registering the game again (" + gameType + " on " + map + ").");
         try
         {
-            _registerTask = _server.RegisterGame((int)a[0], (string)a[1], (string)a[2], (string)a[3], (int)a[4], (string)a[5], (string)a[6],
-                (int)a[7], (string)a[8], (string)a[9], (string)a[10], (int)a[11], (string)a[12]);
+            _registerTask = _server.RegisterGame(
+                MultiplayerOptions.OptionType.GameDefinitionId.GetIntValue(),
+                MultiplayerGameTypes.GetGameTypeInfo(gameType).GameModule,
+                gameType,
+                MultiplayerOptions.OptionType.ServerName.GetStrValue(),
+                MultiplayerOptions.OptionType.MaxNumberOfPlayers.GetIntValue(),
+                map,
+                uniqueSceneId,
+                _server.Port, // set by the first RegisterGame
+                region,
+                MultiplayerOptions.OptionType.GamePassword.GetStrValue(),
+                MultiplayerOptions.OptionType.AdminPassword.GetStrValue(),
+                startup.Permission,
+                startup.CustomServerHostIP);
             _phase = Phase.Registering;
         }
         catch (Exception e)
@@ -271,20 +264,20 @@ internal static class LobbyReconnect
     {
         if (_server == null)
         {
-            return "No game registered yet (start_game has not run).";
+            return "Not attached to the lobby client yet.";
         }
         string status = "Lobby state: " + _server.CurrentState + ", reconnect: " + _phase;
         if (_phase != Phase.Idle)
         {
             status += ", attempt " + _attempt;
         }
-        return status + (_registerArgs == null ? ", shutdown on disconnect not yet suppressed (no game registered)." : ".");
+        return status + (_gameRegistered ? "." : ", shutdown on disconnect not yet suppressed (no game registered).");
     }
 
     // For the console: drops the lobby connection the way a failed keepalive would, to test reconnecting.
     public static string SimulateDisconnect()
     {
-        if (_server == null || _registerArgs == null)
+        if (_server == null || !_gameRegistered)
         {
             return "Refused: no game registered yet, so a disconnect would shut the server down.";
         }
@@ -300,11 +293,17 @@ internal static class LobbyReconnect
     {
         try
         {
-            AccessTools.Method(typeof(CustomBattleServer), "BeginDisconnect").Invoke(_server, null);
+            typeof(CustomBattleServer).GetMethod("BeginDisconnect", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.FlattenHierarchy)
+                .Invoke(_server, null);
         }
         catch (Exception e)
         {
             MPManagerSubModule.Log("Could not reset the lobby connection: " + e.Message);
         }
+    }
+
+    private static T GetField<T>(string name)
+    {
+        return (T)typeof(CustomBattleServer).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic).GetValue(_server);
     }
 }
