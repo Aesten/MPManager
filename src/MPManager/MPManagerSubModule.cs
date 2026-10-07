@@ -11,6 +11,7 @@ public class MPManagerSubModule : MBSubModuleBase
     protected override void OnSubModuleLoad()
     {
         base.OnSubModuleLoad();
+        ServerLog.Open();
         LogFilter.Install();
         ConsoleCommands.Register();
         CommandInput.Start();

@@ -24,6 +24,8 @@ DS_DIR="${DS_DIR:-$HOME/Steam/steamapps/common/Mount & Blade II Dedicated Server
 SERVER_BIN="$DS_DIR/bin/Linux64_Shipping_Server"
 TOKEN_FILE="$SCRIPT_DIR/token.txt"
 LOG_FILE="$SCRIPT_DIR/server.log"
+# MPManager's own log (dated, filtered, written immediately); mpm console and mpm logs read it.
+MPM_LOG_FILE="$SCRIPT_DIR/mpmanager.log"
 LOG_ARCHIVE="$SCRIPT_DIR/logs"
 # Commands written to this named pipe are run by MPManager (the server's own console input doesn't work on Linux).
 COMMAND_FIFO="$SCRIPT_DIR/console.fifo"
@@ -99,6 +101,7 @@ if [ "$INNER" = 1 ]; then
   # so it has to run from inside Linux64_Shipping_Server.
   cd "$SERVER_BIN"
   export MPM_CONSOLE_FIFO="$COMMAND_FIFO"
+  export MPM_LOG_FILE
   exec dotnet TaleWorlds.Starter.DotNetCore.Linux.dll \
     "_MODULES_*${MODULES}*_MODULES_" \
     /dedicatedcustomserverconfigfile "$CONFIG" \
@@ -131,11 +134,16 @@ INNER_ARGS=(--inner --config "$CONFIG" --tickrate "$TICKRATE")
 [ "$MANAGER" = 0 ] && INNER_ARGS+=(--no-manager)
 
 # Keep previous logs (named after their last write time) instead of overwriting them; the 20 newest are kept.
-if [ -f "$LOG_FILE" ]; then
-  mkdir -p "$LOG_ARCHIVE"
-  mv "$LOG_FILE" "$LOG_ARCHIVE/server-$(date -r "$LOG_FILE" +%Y%m%d-%H%M%S).log"
-  ls -1t "$LOG_ARCHIVE"/server-*.log | tail -n +21 | xargs -r rm -f
-fi
+archive_log () {
+  local file="$1" prefix="$2"
+  if [ -f "$file" ]; then
+    mkdir -p "$LOG_ARCHIVE"
+    mv "$file" "$LOG_ARCHIVE/$prefix-$(date -r "$file" +%Y%m%d-%H%M%S).log"
+    ls -1t "$LOG_ARCHIVE"/"$prefix"-*.log | tail -n +21 | xargs -r rm -f
+  fi
+}
+archive_log "$LOG_FILE" server
+archive_log "$MPM_LOG_FILE" mpmanager
 # screen flushes its log file only every 10 s by default; flush every second so the log (and mpm console)
 # keep up with the server. -c replaces ~/.screenrc for this session only.
 SCREENRC="$SCRIPT_DIR/.screenrc"

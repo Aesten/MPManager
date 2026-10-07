@@ -4,7 +4,7 @@
 # Usage: mpm <command> [args]
 #   console              live log + type commands, with history and line editing (Ctrl-D to leave)
 #   cmd <command...>     run one console command and print its output, e.g. mpm cmd mpm_lobby
-#   logs [-f] [-n N]     the last N (default 100) log lines, -f to follow
+#   logs [-f] [-n N]     the last N (default 100) log lines, -f to follow; --raw for the full console log
 #   start [options]      start the server detached; options go to run-server.sh (e.g. --config x.txt)
 #   stop                 stop the server
 #   restart [options]    stop, then start
@@ -13,24 +13,26 @@
 #
 # Lives in ~/bannerlord/ next to run-server.sh, linked as ~/.local/bin/mpm; mpManager's scripts/deploy.sh
 # installs both. Commands reach the server through MPManager's command pipe (console.fifo), because the
-# server's own console input doesn't work on Linux. Logs are shown without the engine's blank lines.
+# server's own console input doesn't work on Linux. Logs come from mpmanager.log, which MPManager writes as
+# lines are printed (dated, filtered); server.log is screen's raw copy of the console.
 
 set -uo pipefail
 
 # Resolve the ~/.local/bin/mpm symlink to the script's real folder.
-SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+SELF="$(readlink -f "${BASH_SOURCE[0]}")"
+SCRIPT_DIR="$(dirname "$SELF")"
 RUN_SERVER="$SCRIPT_DIR/run-server.sh"
-LOG_FILE="$SCRIPT_DIR/server.log"
+LOG_FILE="$SCRIPT_DIR/mpmanager.log"
+RAW_LOG_FILE="$SCRIPT_DIR/server.log"
 COMMAND_FIFO="$SCRIPT_DIR/console.fifo"
-HISTFILE="$SCRIPT_DIR/.console_history"
 SESSION="bannerlord"
 SERVER_PATTERN="^dotnet TaleWorlds.Starter.DotNetCore.Linux.dll"
 
 usage () {
-  sed -n '4,13p' "$(readlink -f "${BASH_SOURCE[0]}")" | sed 's/^# \{0,1\}//'
+  sed -n '4,13p' "$SELF" | sed 's/^# \{0,1\}//'
 }
 
-# The engine ends every line with \r\r\n plus an empty line; strip both. -u: unbuffered, for following.
+# For server.log: the engine ends every line with CR CR LF plus an empty line; strip both. -u: unbuffered.
 clean () {
   sed -u -e 's/\r//g' -e '/^[[:space:]]*$/d'
 }
@@ -47,40 +49,35 @@ command="${1:-}"
 [ $# -gt 0 ] && shift
 case "$command" in
   console)
-    tail -n 60 -F "$LOG_FILE" 2>/dev/null | clean &
-    TAIL_PID=$!
-    trap 'kill $TAIL_PID 2>/dev/null' EXIT
-    history -r "$HISTFILE" 2>/dev/null
-    echo "Console attached. Type commands (list, mpm_lobby, ...); Ctrl-D or 'exit' to leave, the server keeps running."
-    while IFS= read -e -r line; do
-      [ "$line" = exit ] && break
-      [ -z "${line// }" ] && continue
-      history -s "$line"
-      history -a "$HISTFILE"
-      send "$line"
-    done
+    exec python3 "$SCRIPT_DIR/mpm-console.py"
     ;;
   cmd)
     [ $# -gt 0 ] || { echo "Usage: mpm cmd <command...>" >&2; exit 1; }
-    before=$(wc -l < "$LOG_FILE" 2>/dev/null || echo 0)
+    before=$(stat -c %s "$LOG_FILE" 2>/dev/null || echo 0)
     send "$*" || exit 1
-    # The log is flushed every second (see run-server.sh); show what the command printed.
-    sleep 2
-    tail -n +"$((before + 1))" "$LOG_FILE" | clean | sed -n '/\[MPManager\] > /,$p' | head -n 60
+    sleep 1
+    # Everything logged since, from the echo of this command on.
+    tail -c +"$((before + 1))" "$LOG_FILE" | sed -n '/\[MPManager\] > /,$p' | head -n 60
     ;;
   logs)
     follow=""
     lines=100
+    raw=0
     while [ $# -gt 0 ]; do
       case "$1" in
         -f) follow="-F" ;;
         -n) lines="${2:?-n needs a number}"; shift ;;
+        --raw) raw=1 ;;
         *) echo "Unknown option: $1" >&2; exit 1 ;;
       esac
       shift
     done
-    # Every message is followed by a blank line, so read twice as many.
-    tail -n $((lines * 2)) $follow "$LOG_FILE" | clean
+    if [ "$raw" = 1 ]; then
+      # Every message is followed by a blank line, so read twice as many.
+      tail -n $((lines * 2)) $follow "$RAW_LOG_FILE" | clean
+    else
+      tail -n "$lines" $follow "$LOG_FILE"
+    fi
     ;;
   start)
     "$RUN_SERVER" -d "$@"

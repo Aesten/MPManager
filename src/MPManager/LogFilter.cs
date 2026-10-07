@@ -2,8 +2,8 @@ using TaleWorlds.Library;
 
 namespace MPManager;
 
-// Wraps the game's debug manager to drop routine lobby traffic from the log. Every Debug.Print goes through
-// Debug.DebugManager; everything except Print is passed through unchanged.
+// Wraps the game's debug manager to drop routine lobby traffic from the log, and copies everything else to
+// ServerLog. Every Debug.Print goes through Debug.DebugManager; other calls are passed through unchanged.
 //
 // A healthy keepalive (every 2 s) prints four lines: "Http Post Request to ...", "Protocol version used for post
 // request to ...", and "ClientRestSessionTask::SetFinishedAsSuccessful::...AliveMessage" with and without " done".
@@ -38,6 +38,7 @@ internal sealed class LogFilter : IDebugManager
     {
         if (!IsNoise(message))
         {
+            ServerLog.Write(message);
             _inner.Print(message, logLevel, color, debugFilter);
         }
     }
@@ -50,9 +51,17 @@ internal sealed class LogFilter : IDebugManager
     public void SilentAssert(bool condition, string message, bool getDump, string callerFile, string callerMethod, int callerLine) =>
         _inner.SilentAssert(condition, message, getDump, callerFile, callerMethod, callerLine);
 
-    public void PrintError(string error, string stackTrace, ulong debugFilter) => _inner.PrintError(error, stackTrace, debugFilter);
+    public void PrintError(string error, string stackTrace, ulong debugFilter)
+    {
+        ServerLog.Write(error);
+        _inner.PrintError(error, stackTrace, debugFilter);
+    }
 
-    public void PrintWarning(string warning, ulong debugFilter) => _inner.PrintWarning(warning, debugFilter);
+    public void PrintWarning(string warning, ulong debugFilter)
+    {
+        ServerLog.Write(warning);
+        _inner.PrintWarning(warning, debugFilter);
+    }
 
     public void ShowError(string message) => _inner.ShowError(message);
 

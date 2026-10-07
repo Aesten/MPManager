@@ -1,3 +1,4 @@
 # Shell scripts run on the Linux server; keep them LF on Windows checkouts.
 *.sh text eol=lf
 scripts/server/mpm text eol=lf
+*.py text eol=lf
