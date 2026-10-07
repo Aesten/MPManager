@@ -49,15 +49,27 @@ scripts/deploy.sh                # build and install the module
 scripts/deploy.sh --restart      # ...then restart the server
 ```
 
-The server is started by `~/bannerlord/run-server.sh`, which mpbalancer's `scripts/deploy.sh`
-installs. It adds MPManager to the module list whenever `Modules/MPManager` is installed;
-`--no-manager` leaves it out.
+`deploy.sh` also installs the server launcher, `~/bannerlord/run-server.sh` (source: `scripts/server/run-server.sh`). It starts the server with MPBalancer (installed by mpbalancer's own `deploy.sh`), plus MPManager whenever `Modules/MPManager` is installed:
+
+```sh
+./run-server.sh                  # start in screen session "bannerlord" and attach
+./run-server.sh -d               # start detached
+./run-server.sh --vanilla        # without MPBalancer, for A/B comparisons
+./run-server.sh --no-manager     # without MPManager
+./run-server.sh --config x.txt   # config file in Modules/Native (default: config.txt)
+./run-server.sh --tickrate 60    # server tick rate in Hz (default: 240)
+./run-server.sh --stop           # stop the server and wait for it to exit
+```
+
+- It reads the auth token from `token.txt` and `cd`s into `bin/Linux64_Shipping_Server` before starting (that folder's name decides where module DLLs are loaded from).
+- Output goes to `~/bannerlord/server.log`; logs of earlier runs are moved to `~/bannerlord/logs/server-<time>.log` (20 kept). The server prints its full command line, auth token included, into its logs, so don't share them.
+- `--stop` sends SIGTERM: the server ignores SIGHUP, so closing the screen session alone leaves it running.
 
 ## First test
 
 This build hasn't run on the server yet. To check it:
 
-1. Deploy mpbalancer (for the updated `run-server.sh`), then `scripts/deploy.sh --restart` here.
+1. `scripts/deploy.sh --restart` (installs the module and `run-server.sh`, then restarts the server).
 2. In the log, look for `[MPManager] Loaded (Harmony ...)`. A `Failed to install patches` line
    means Harmony doesn't work on the server, which needs fixing before anything else.
    The game may also log a failed attempt to load `0Harmony.dll` from the server's own bin folder;

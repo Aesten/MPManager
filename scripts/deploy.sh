@@ -1,13 +1,12 @@
 #!/usr/bin/env bash
-# Builds MPManager and installs it on the test server.
+# Builds MPManager and installs it on the test server, along with run-server.sh.
 #
 # Usage: scripts/deploy.sh [--no-build] [--restart [-- <run-server.sh options>]]
 #   --no-build  copy the existing dist/ output without rebuilding
 #   --restart   stop the running server (if any) and start it again, detached;
 #               options after -- go to run-server.sh, e.g. --restart -- --tickrate 60
 #
-# The server is started by ~/bannerlord/run-server.sh, installed by mpbalancer's deploy.sh;
-# it loads MPManager whenever Modules/MPManager is installed.
+# run-server.sh (scripts/server/) starts the server and loads MPManager whenever it's installed.
 # MPM_HOST overrides the ssh target (default: aesten@7900x).
 
 set -euo pipefail
@@ -45,6 +44,10 @@ MODULE_DIR="$REPO_ROOT/dist/Modules/MPManager"
 echo "Installing module to $HOST:~/$REMOTE_DS/Modules/MPManager"
 tar -C "$REPO_ROOT/dist/Modules" -cf - MPManager \
   | ssh "$HOST" "cd \"\$HOME/$REMOTE_DS/Modules\" && rm -rf MPManager && tar -xf -"
+
+echo "Installing run-server.sh to $HOST:~/$REMOTE_SCRIPTS/"
+ssh "$HOST" "mkdir -p \"\$HOME/$REMOTE_SCRIPTS\" && cat > \"\$HOME/$REMOTE_SCRIPTS/run-server.sh\" && chmod +x \"\$HOME/$REMOTE_SCRIPTS/run-server.sh\"" \
+  < "$REPO_ROOT/scripts/server/run-server.sh"
 
 if [ "$RESTART" = 1 ]; then
   # %q-quote the pass-through options so they survive the remote shell.
