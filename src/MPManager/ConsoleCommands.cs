@@ -20,7 +20,7 @@ internal static class ConsoleCommands
     }
 
     [UsedImplicitly]
-    [ConsoleCommandMethod("mpm_lobby_disconnect", "Drops the lobby connection on purpose, to test that MPManager reconnects without a restart.")]
+    [ConsoleCommandMethod("mpm_lobby_disconnect", "Drops the lobby connection on purpose, to test that MPManager reconnects without a restart. Players in the game are returned to the lobby about two minutes later.")]
     private static void LobbyDisconnect()
     {
         MPManagerSubModule.Log(LobbyReconnect.SimulateDisconnect());

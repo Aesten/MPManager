@@ -10,13 +10,17 @@ at runtime) is in `../BannerlordDecompiled/notes/dedicated-server-runtime.md`.
 ## What it does
 
 **Survives losing the lobby connection.** Vanilla, the server shuts itself down 20 s after its
-connection to TaleWorlds' lobby drops, which happens whenever a keepalive request fails 5 retries,
-even mid-match. Once a game has been registered, MPManager skips that shutdown and reconnects in the
-background (5 s, then doubling up to 60 s between attempts). It then registers the game again with
-the current game type, map and player cap. Players in the game keep playing; only new joins wait
-for the reconnect. If the automated rotation tried to start a battle during the outage, that battle
-is started once the server is registered again. Before the first registration (`start_game`), the
-vanilla shutdown still applies.
+connection to TaleWorlds' lobby drops, which happens whenever a keepalive request fails 5 retries.
+Once a game has been registered, MPManager skips that shutdown and reconnects in the background
+(5 s, then doubling up to 60 s between attempts). It then registers the game again with the current game
+type, map and player cap, and with the passwords as first registered. If the automated rotation tried to
+start a battle during the outage, that battle is started once the server is registered again. Before the
+first registration (`start_game`), the vanilla shutdown still applies.
+
+What it can't keep: a re-registration is a new game in the lobby. About two minutes after the drop, the
+lobby ends the old game, and each player's client returns itself to the lobby
+(`New MBGameClient State: AtLobby old state:InCustomGame` in the client log). The server stays up and
+listed, so they can rejoin straight away, but there's no restart or second registration attempt to wait for.
 
 **A working console.** On the Linux server, lines typed into the server's own console are echoed but
 never executed. MPManager reads commands from a named pipe instead (`~/bannerlord/console.fifo`, created
@@ -31,7 +35,7 @@ MPManager's console commands (`list` shows all commands, `<command> ?` describes
 | Command | Effect |
 |---|---|
 | `mpm_lobby` | Shows the lobby connection state and any reconnect in progress. |
-| `mpm_lobby_disconnect` | Drops the lobby connection on purpose, to test reconnecting. |
+| `mpm_lobby_disconnect` | Drops the lobby connection on purpose, to test reconnecting. Players in the game are returned to the lobby about two minutes later (see above). |
 
 ## Building
 

@@ -47,6 +47,13 @@ internal static class LobbyReconnect
     private static volatile bool _gameRegistered;
     private static volatile bool _connectionLost;
 
+    // The passwords as first registered: start_game replaces the options with their MD5 hashes and registers
+    // those, but the automated rotation copies the next-map options (saved from the config before hashing) back
+    // over them at every new battle, so the options hold the plain text again. Registering that made every
+    // password "incorrect" for joining players.
+    private static string _registeredGamePassword;
+    private static string _registeredAdminPassword;
+
     private static Phase _phase;
     private static DateTime _deadline;
     private static double _retryDelay = FirstRetryDelaySeconds;
@@ -72,6 +79,8 @@ internal static class LobbyReconnect
         }
         if (!_gameRegistered && _server.CurrentState == CustomBattleServer.State.RegisteredGame)
         {
+            _registeredGamePassword = MultiplayerOptions.OptionType.GamePassword.GetStrValue();
+            _registeredAdminPassword = MultiplayerOptions.OptionType.AdminPassword.GetStrValue();
             _gameRegistered = true;
             MPManagerSubModule.Log("Game registered with the lobby; a lost lobby connection will now be reconnected instead of shutting the server down.");
         }
@@ -194,8 +203,8 @@ internal static class LobbyReconnect
 
     private static void StartRegister()
     {
-        // Mirrors ServerSideIntermissionManager.StartGameAux + DedicatedCustomServerIntermissionManagerHandler.OnGameStart.
-        // The passwords were already hashed by start_game and are passed on as stored.
+        // Mirrors ServerSideIntermissionManager.StartGameAux + DedicatedCustomServerIntermissionManagerHandler.OnGameStart,
+        // with the passwords as first registered (see _registeredGamePassword).
         GameStartupInfo startup = TaleWorlds.MountAndBlade.Module.CurrentModule.StartupInfo;
         string gameType = MultiplayerOptions.OptionType.GameType.GetStrValue();
         string map = MultiplayerOptions.OptionType.Map.GetStrValue();
@@ -215,8 +224,8 @@ internal static class LobbyReconnect
                 uniqueSceneId,
                 _server.Port, // set by the first RegisterGame
                 region,
-                MultiplayerOptions.OptionType.GamePassword.GetStrValue(),
-                MultiplayerOptions.OptionType.AdminPassword.GetStrValue(),
+                _registeredGamePassword,
+                _registeredAdminPassword,
                 startup.Permission,
                 startup.CustomServerHostIP);
             _phase = Phase.Registering;
