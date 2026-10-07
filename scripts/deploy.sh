@@ -1,13 +1,12 @@
 #!/usr/bin/env bash
 # Builds MPManager and installs it on the test server, along with the server scripts (scripts/server/:
-# run-server.sh, console.sh) in ~/bannerlord/.
+# run-server.sh, mpm) in ~/bannerlord/. mpm is linked as ~/.local/bin/mpm, so it's on the PATH there.
 #
 # Usage: scripts/deploy.sh [--no-build] [--restart [-- <run-server.sh options>]]
 #   --no-build  copy the existing dist/ output without rebuilding
 #   --restart   stop the running server (if any) and start it again, detached;
 #               options after -- go to run-server.sh, e.g. --restart -- --tickrate 60
 #
-# run-server.sh (scripts/server/) starts the server and loads MPManager whenever it's installed.
 # MPM_HOST overrides the ssh target (default: aesten@7900x).
 
 set -euo pipefail
@@ -46,12 +45,15 @@ echo "Installing module to $HOST:~/$REMOTE_DS/Modules/MPManager"
 tar -C "$REPO_ROOT/dist/Modules" -cf - MPManager \
   | ssh "$HOST" "cd \"\$HOME/$REMOTE_DS/Modules\" && rm -rf MPManager && tar -xf -"
 
-for script in "$REPO_ROOT"/scripts/server/*.sh; do
+for script in "$REPO_ROOT"/scripts/server/*; do
   name="$(basename "$script")"
   echo "Installing $name to $HOST:~/$REMOTE_SCRIPTS/"
   ssh "$HOST" "mkdir -p \"\$HOME/$REMOTE_SCRIPTS\" && cat > \"\$HOME/$REMOTE_SCRIPTS/$name\" && chmod +x \"\$HOME/$REMOTE_SCRIPTS/$name\"" \
     < "$script"
 done
+
+# console.sh was folded into "mpm console".
+ssh "$HOST" "rm -f \"\$HOME/$REMOTE_SCRIPTS/console.sh\" && mkdir -p \"\$HOME/.local/bin\" && ln -sfn \"\$HOME/$REMOTE_SCRIPTS/mpm\" \"\$HOME/.local/bin/mpm\""
 
 if [ "$RESTART" = 1 ]; then
   # %q-quote the pass-through options so they survive the remote shell.

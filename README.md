@@ -51,27 +51,26 @@ extension points and reflection instead, for example by swapping in its own lobb
 
 ## Controlling the server
 
-`scripts/mpm` runs on this machine and controls the test server over ssh:
+On the server, `mpm` (installed as `~/bannerlord/mpm`, linked from `~/.local/bin`):
 
 ```sh
-scripts/mpm console              # live log + type commands, with history and line editing (Ctrl-D to leave)
-scripts/mpm cmd mpm_lobby        # run one command and print its output
-scripts/mpm logs [-f] [-n 200]   # recent log lines, -f to follow
-scripts/mpm start [options]      # start detached; options go to run-server.sh
-scripts/mpm stop | restart | status
-scripts/mpm attach               # the raw screen session (Ctrl-A D to detach)
-scripts/mpm deploy [--restart]   # build and install the module and server scripts
+mpm console              # live log + type commands, with history and line editing (Ctrl-D to leave)
+mpm cmd mpm_lobby        # run one command and print its output
+mpm logs [-f] [-n 200]   # recent log lines, -f to follow
+mpm start [options]      # start detached; options go to run-server.sh
+mpm stop | restart | status
+mpm attach               # the raw screen session (Ctrl-A D to detach)
 ```
 
-`console` and `logs` hide the engine's blank lines. On the server itself, `~/bannerlord/console.sh` is the
-same console, and `echo "<command>" > ~/bannerlord/console.fifo` sends a single command.
+`console` and `logs` hide the engine's blank lines. Commands go through `~/bannerlord/console.fifo`, so
+`echo "<command>" > ~/bannerlord/console.fifo` works too.
 
 ## Test server
 
 Same server as mpbalancer (`ssh aesten@7900x`; set `MPM_HOST` to deploy elsewhere):
 
 ```sh
-scripts/deploy.sh                # build and install the module
+scripts/deploy.sh                # build and install the module and the server scripts (run-server.sh, mpm)
 scripts/deploy.sh --restart      # ...then restart the server
 ```
 
@@ -99,7 +98,7 @@ To check a build:
 2. In the log, look for `[MPManager] Loaded.`, then `[MPManager] Watching the lobby connection.`
 3. After `start_game`: `[MPManager] Game registered with the lobby...`, and `mpm_lobby` reports
    `RegisteredGame`.
-4. Join the server, then run `scripts/mpm cmd mpm_lobby_disconnect`. Expected: no shutdown countdown,
+4. Join the server, then run `mpm cmd mpm_lobby_disconnect` on the server. Expected: no shutdown countdown,
    `Reconnecting to the lobby in 5 s`, then `Reconnected to the lobby`. You stay in the game
    throughout, and a second player can join afterwards.
 

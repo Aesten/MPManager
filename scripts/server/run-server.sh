@@ -136,7 +136,7 @@ if [ -f "$LOG_FILE" ]; then
   mv "$LOG_FILE" "$LOG_ARCHIVE/server-$(date -r "$LOG_FILE" +%Y%m%d-%H%M%S).log"
   ls -1t "$LOG_ARCHIVE"/server-*.log | tail -n +21 | xargs -r rm -f
 fi
-# screen flushes its log file only every 10 s by default; flush every second so the log (and console.sh)
+# screen flushes its log file only every 10 s by default; flush every second so the log (and mpm console)
 # keep up with the server. -c replaces ~/.screenrc for this session only.
 SCREENRC="$SCRIPT_DIR/.screenrc"
 printf 'logfile flush 1
