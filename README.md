@@ -1,0 +1,77 @@
+# mpManager
+
+A **server-side management module** for the Mount & Blade II: Bannerlord Dedicated Server: stability,
+logging and runtime control for custom (listed) servers. It runs on the server only; players don't
+need to install anything.
+
+Background on how the vanilla server behaves (console, log spam, what shuts it down, what can change
+at runtime) is in `../BannerlordDecompiled/notes/dedicated-server-runtime.md`.
+
+## What it does
+
+**Survives losing the lobby connection.** Vanilla, the server shuts itself down 20 s after its
+connection to TaleWorlds' lobby drops, which happens whenever a keepalive request fails 5 retries,
+even mid-match. Once a game has been registered, MPManager skips that shutdown and reconnects in the
+background (5 s, then doubling up to 60 s between attempts). It then registers the game again with
+the current game type, map and player cap. Players in the game keep playing; only new joins wait
+for the reconnect. If the automated rotation tried to start a battle during the outage, that battle
+is started once the server is registered again. Before the first registration (`start_game`), the
+vanilla shutdown still applies.
+
+Console commands (type `list` for all commands, `<command> ?` for a description):
+
+| Command | Effect |
+|---|---|
+| `mpm_lobby` | Shows the lobby connection state and any reconnect in progress. |
+| `mpm_lobby_disconnect` | Drops the lobby connection on purpose, to test reconnecting. |
+
+## Building
+
+```sh
+dotnet build src/MPManager -c Release
+```
+
+This compiles against the local Dedicated Server install's DLLs (override with `-p:DSDir="..."`)
+and writes the module to `dist/Modules/MPManager/`: `SubModule.xml`, plus `MPManager.dll` and
+`0Harmony.dll` in both `bin/Linux64_Shipping_Server` and `bin/Win64_Shipping_Server`.
+
+It targets `net6.0`, the runtime the server runs on, because Harmony
+([Lib.Harmony](https://github.com/pardeike/Harmony)) has no netstandard2.0 build. `SubModule.xml`
+lists `0Harmony.dll` under `<Assemblies>`, so the game loads it from the module folder before
+`MPManager.dll`. The module only loads on custom dedicated servers (`DedicatedServerType` `custom`).
+
+## Test server
+
+Same server as mpbalancer (`ssh aesten@7900x`; set `MPM_HOST` to deploy elsewhere):
+
+```sh
+scripts/deploy.sh                # build and install the module
+scripts/deploy.sh --restart      # ...then restart the server
+```
+
+The server is started by `~/bannerlord/run-server.sh`, which mpbalancer's `scripts/deploy.sh`
+installs. It adds MPManager to the module list whenever `Modules/MPManager` is installed;
+`--no-manager` leaves it out.
+
+## First test
+
+This build hasn't run on the server yet. To check it:
+
+1. Deploy mpbalancer (for the updated `run-server.sh`), then `scripts/deploy.sh --restart` here.
+2. In the log, look for `[MPManager] Loaded (Harmony ...)`. A `Failed to install patches` line
+   means Harmony doesn't work on the server, which needs fixing before anything else.
+   The game may also log a failed attempt to load `0Harmony.dll` from the server's own bin folder;
+   that's expected as long as the `Loaded` line follows.
+3. After `start_game`, `mpm_lobby` should report `RegisteredGame`.
+4. Join the server, then run `mpm_lobby_disconnect`. Expected: no shutdown countdown,
+   `Reconnecting to the lobby in 5 s`, then `Reconnected to the lobby`. You stay in the game
+   throughout, and a second player can join afterwards.
+
+## Planned
+
+- Logging: timestamps, filtering the lobby keepalive lines, a log file.
+- Server control commands, from the console and from admin chat: per-mode profiles (Skirmish,
+  Battle) with their own map pools, map/mode/faction switching, a per-team player cap with overflow
+  to spectators, holding warmup, adding and removing bots, kick and ban.
+- A remote control channel and a nicer console client.
+- Retrying a `start_game` that failed to register, instead of needing a restart.
