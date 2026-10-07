@@ -108,8 +108,7 @@ about 6 s after the disconnect. Staying in the game, and joining afterwards, sti
 
 ## Planned
 
-- Server control commands, from the console and from admin chat: per-mode profiles (Skirmish,
+- Server control commands, through mpm cmd and from admin chat: per-mode profiles (Skirmish,
   Battle) with their own map pools, map/mode/faction switching, a per-team player cap with overflow
   to spectators, holding warmup, adding and removing bots, kick and ban.
-- A remote control channel and a nicer console client.
 - Retrying a `start_game` that failed to register, instead of needing a restart.
