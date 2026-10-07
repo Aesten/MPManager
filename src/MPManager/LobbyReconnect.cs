@@ -133,7 +133,7 @@ internal static class LobbyReconnect
         }
         if (!(handler is SessionHandlerWrapper))
         {
-            HandlerField.SetValue(server, new SessionHandlerWrapper(handler));
+            HandlerField.SetValue(server, new SessionHandlerWrapper(handler, server.CurrentState == CustomBattleServer.State.RegisteredGame));
         }
         _server = server;
         MPManagerSubModule.Log("Watching the lobby connection.");
