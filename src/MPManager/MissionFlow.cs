@@ -125,6 +125,12 @@ internal static class MissionFlow
         {
             return;
         }
+        // Once the mission is ending (!setmap, !resetmap), the shared mission timer counts down the end screen:
+        // restarting it as warmup kept the mission from ever ending. The hold carries on in the next mission.
+        if (mission.GetMissionBehavior<MissionLobbyComponent>()?.CurrentMultiplayerState == MissionLobbyComponent.MultiplayerGameState.Ending)
+        {
+            return;
+        }
         var state = (MultiplayerWarmupComponent.WarmupStates)WarmupStateProperty.GetValue(warmup);
         if (state == MultiplayerWarmupComponent.WarmupStates.Ending
             || (state == MultiplayerWarmupComponent.WarmupStates.InProgress && timer.GetRemainingTime(isSynched: false) < WarmupRefreshBelowSeconds))
