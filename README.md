@@ -9,33 +9,36 @@ at runtime) is in `../BannerlordDecompiled/notes/dedicated-server-runtime.md`.
 
 ## What it does
 
-**Survives losing the lobby connection.** Vanilla, the server shuts itself down 20 s after its
-connection to TaleWorlds' lobby drops, which happens whenever a keepalive request fails 5 retries.
-Once a game has been registered, MPManager skips that shutdown and reconnects in the background
-(5 s, then doubling up to 60 s between attempts). It then registers the game again with the current game
-type, map and player cap, and with the passwords as first registered. If the automated rotation tried to
-start a battle during the outage, that battle is started once the server is registered again. Before the
-first registration (`start_game`), the vanilla shutdown still applies.
-
-What it can't keep: a re-registration is a new game in the lobby. About two minutes after the drop, the
-lobby ends the old game, and each player's client returns itself to the lobby
-(`New MBGameClient State: AtLobby old state:InCustomGame` in the client log). The server stays up and
-listed, so they can rejoin straight away, but there's no restart or second registration attempt to wait for.
-
-**A working console.** On the Linux server, lines typed into the server's own console are echoed but
-never executed. MPManager reads commands from a named pipe instead (`~/bannerlord/console.fifo`, created
-by `run-server.sh`) and runs them exactly like console input, so options, the game's commands and the
-`mpm_*` commands all work. See [Controlling the server](#controlling-the-server).
-
-**Less log spam.** The lobby keepalive (four lines every 2 s, which was about a third of the log) is
-filtered out. Lobby retries and failures still show.
-
-MPManager's console commands (`list` shows all commands, `<command> ?` describes one):
+**Chat commands for admins** (players who joined with the server's admin password). Messages starting
+with `!` or `/` are never shown in chat; the server handles them and answers privately, and changes are
+announced to everyone.
 
 | Command | Effect |
 |---|---|
-| `mpm_lobby` | Shows the lobby connection state and any reconnect in progress. |
-| `mpm_lobby_disconnect` | Drops the lobby connection on purpose, to test reconnecting. Players in the game are returned to the lobby about two minutes later (see above). |
+| `!help` | Lists the commands. |
+| `!maps` | Numbered list of the maps for the current mode (official, added with `add_map_to_usable_maps` / `add_map_to_automated_battle_pool`, and custom scenes in `Modules/Multiplayer/SceneObj`). |
+| `!map` | Shows the current mode, map and cultures. |
+| `!map <map> [team1 team2]` | Switches the map (and optionally the cultures) and restarts the mission. |
+| `!factions [team1 team2]` | Shows the cultures, or switches them and restarts the mission. |
+| `!restart` | Restarts the mission with the same map and cultures. |
+| `!warmup end` | Ends warmup now (30 s countdown). Also releases a hold. |
+| `!warmup hold` | Keeps warmup going, from now on and in later missions, until `!warmup end`. |
+
+Maps and cultures can be given by number (from `!maps` / `!factions`), by id or display name, by any unique
+part of either (`trad`, `emp`, `vla`), or misspelled (`osrak insurection vla stur` works). Anyone can use
+`!help`, `!maps` and `!map` without arguments. Other mods' commands (MPBalancer's `!b`) are hidden from
+chat the same way and still reach their mod.
+
+**The same mission again, quickly.** There are no map or culture votes. When a mission ends, the next
+one uses the same mode, map and cultures, unless a command changed them. The scoreboard after a mission
+lasts 5 s instead of 15 (clients still count down from 15 and are moved on early), and the wait before the
+next one is 3 s instead of 10. If the config doesn't turn on the automated rotation, MPManager does, and
+the server never stops after a set number of battles.
+
+**Logs and server commands.** MPManager writes its own log, `~/bannerlord/mpmanager.log`: every line as
+it's printed, dated, without the engine's blank lines or the lobby keepalive (four lines every 2 s).
+Commands are sent through a named pipe (`~/bannerlord/console.fifo`), because the server's own console
+input doesn't work on Linux. Chat commands work there too, as an admin.
 
 ## Building
 
@@ -51,24 +54,23 @@ server runs on. The module only loads on custom dedicated servers (`DedicatedSer
 **No Harmony.** Harmony 2.3.6 crashed the Linux server on its first patch: its MonoMod backend
 segfaults while detecting the platform (`DynDll.OpenLibrary` in `PlatformDetection`), and the
 engine's signal handler takes the process down. So MPManager changes game behaviour through public
-extension points and reflection instead, for example by swapping in its own lobby session handler.
+extension points and reflection instead, for example by taking the place of ChatBox's chat handlers.
 
 ## Controlling the server
 
 On the server, `mpm` (installed as `~/bannerlord/mpm`, linked from `~/.local/bin`):
 
 ```sh
-mpm cmd <command>        # send a console command and print what it logged, e.g. mpm cmd mpm_lobby
-mpm logs [-f] [-n 100]   # recent log lines without noise, -f to follow; --all for everything
+mpm cmd /map trad          # a chat command, as an admin ("/" avoids bash's "!" history expansion)
+mpm cmd MaxNumberOfPlayers 12   # a server option or console command
+mpm logs [-f] [-n 100]     # recent log lines without noise, -f to follow; --all for everything
 mpm start | stop | restart | status
 ```
 
-Commands go through `~/bannerlord/console.fifo` (`echo "<command>" > ~/bannerlord/console.fifo` works
-too). Logs come from `~/bannerlord/mpmanager.log`, which MPManager writes as each line is printed: dated,
-no blank lines, no keepalive noise. `mpm logs` also hides routine lines listed in `NOISE` at the top of
+`mpm cmd` prints what the command logged. `mpm logs` hides routine lines listed in `NOISE` at the top of
 `scripts/server/mpm`. `server.log` is screen's raw copy of the console. Both logs are archived to
-`~/bannerlord/logs/` when the server starts. The server runs detached in screen; nothing prints to your
-terminal unless you ask for it.
+`~/bannerlord/logs/` (20 of each kept) when the server starts. The server runs detached in screen; nothing
+prints to your terminal unless you ask for it.
 
 ## Test server
 
@@ -95,24 +97,10 @@ scripts/deploy.sh --restart      # ...then restart the server
 - Output goes to `~/bannerlord/server.log`; logs of earlier runs are moved to `~/bannerlord/logs/server-<time>.log` (20 kept). The server prints its full command line, auth token included, into its logs, so don't share them.
 - `--stop` sends SIGTERM: the server ignores SIGHUP, so closing the screen session alone leaves it running.
 
-## First test
-
-To check a build:
-
-1. `scripts/deploy.sh --restart` (installs the module and `run-server.sh`, then restarts the server).
-2. In the log, look for `[MPManager] Loaded.`, then `[MPManager] Watching the lobby connection.`
-3. After `start_game`: `[MPManager] Game registered with the lobby...`, and `mpm_lobby` reports
-   `RegisteredGame`.
-4. Join the server, then run `mpm cmd mpm_lobby_disconnect` on the server. Expected: no shutdown countdown,
-   `Reconnecting to the lobby in 5 s`, then `Reconnected to the lobby`. You stay in the game
-   throughout, and a second player can join afterwards.
-
-Steps 1-3, and step 4 without a player connected, passed on 2026-10-07: the server re-registered
-about 6 s after the disconnect. Staying in the game, and joining afterwards, still need a player.
-
 ## Planned
 
-- Server control commands, through mpm cmd and from admin chat: per-mode profiles (Skirmish,
-  Battle) with their own map pools, map/mode/faction switching, a per-team player cap with overflow
-  to spectators, holding warmup, adding and removing bots, kick and ban.
-- Retrying a `start_game` that failed to register, instead of needing a restart.
+- Profiles: hot-swappable presets (bot debugging, Skirmish matches, Battle training) applied with a chat
+  command, on top of a base config on the server that holds the name, passwords and `start_game`.
+- `!mode` to switch between Skirmish and Battle, with each mode's map pool.
+- A per-team player cap with overflow to spectators (6 per team for Skirmish).
+- Adding and removing bots, kick and ban.

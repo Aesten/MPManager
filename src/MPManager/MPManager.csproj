@@ -24,6 +24,7 @@
     <Reference Include="$(DSBin)\TaleWorlds.DotNet.dll" Private="false" />
     <Reference Include="$(DSBin)\TaleWorlds.Engine.dll" Private="false" />
     <Reference Include="$(DSBin)\TaleWorlds.Library.dll" Private="false" />
+    <Reference Include="$(DSBin)\TaleWorlds.Localization.dll" Private="false" />
     <Reference Include="$(DSBin)\TaleWorlds.ModuleManager.dll" Private="false" />
     <Reference Include="$(DSBin)\TaleWorlds.MountAndBlade.dll" Private="false" />
     <Reference Include="$(DSBin)\TaleWorlds.MountAndBlade.DedicatedCustomServer.dll" Private="false" />

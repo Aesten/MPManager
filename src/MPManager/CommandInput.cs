@@ -10,9 +10,10 @@ namespace MPManager;
 // the Linux server (typed lines are echoed by the terminal, but not executed).
 //
 // run-server.sh creates the pipe and passes its path in MPM_CONSOLE_FIFO. A background thread reads lines from
-// it; Tick runs them on the main thread through GameNetwork.HandleConsoleCommand, exactly as if they had been
-// typed into the console: options, the game's commands and MPManager's mpm_* commands all work.
-// Send a command with: echo "list" > ~/bannerlord/console.fifo   (or mpm cmd / mpm console)
+// it; Tick runs them on the main thread. Lines starting with "!" or "/" are chat commands (Commands, run as an
+// admin); anything else goes to GameNetwork.HandleConsoleCommand, exactly as if it had been typed into the
+// console, so options and the game's own commands work.
+// Send a command with: mpm cmd "!map village", or echo "list" > ~/bannerlord/console.fifo
 internal static class CommandInput
 {
     private static readonly ConcurrentQueue<string> Pending = new ConcurrentQueue<string>();
@@ -64,6 +65,11 @@ internal static class CommandInput
         while (Pending.TryDequeue(out string command))
         {
             MPManagerSubModule.Log("> " + command);
+            if (ChatInterceptor.IsCommand(command))
+            {
+                Commands.Enqueue(null, command);
+                continue;
+            }
             try
             {
                 GameNetwork.HandleConsoleCommand(command);

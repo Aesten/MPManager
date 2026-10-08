@@ -6,14 +6,13 @@ namespace MPManager;
 
 public class MPManagerSubModule : MBSubModuleBase
 {
-    private static bool _lobbyReconnectFailed;
+    private static bool _failed;
 
     protected override void OnSubModuleLoad()
     {
         base.OnSubModuleLoad();
         ServerLog.Open();
         LogFilter.Install();
-        ConsoleCommands.Register();
         CommandInput.Start();
         Log("Loaded.");
     }
@@ -23,19 +22,21 @@ public class MPManagerSubModule : MBSubModuleBase
     {
         base.OnApplicationTick(dt);
         CommandInput.Tick();
-        if (_lobbyReconnectFailed)
+        if (_failed)
         {
             return;
         }
         try
         {
-            LobbyReconnect.Tick();
+            ChatInterceptor.Tick();
+            Commands.Tick();
+            MissionFlow.Tick();
         }
         catch (Exception e)
         {
-            // Never take the server down over our own logic; switch the feature off instead.
-            _lobbyReconnectFailed = true;
-            Log("Lobby reconnect failed and is now off: " + e);
+            // Never take the server down over our own logic; switch it off instead.
+            _failed = true;
+            Log("Stopped after an error; chat commands and mission flow are off until restart: " + e);
         }
     }
 
