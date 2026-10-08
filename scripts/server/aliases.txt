@@ -1,0 +1,10 @@
+# MPManager chat command aliases: <alias> = <command> [arguments]
+# "!sm lighthouse" runs "!setmap lighthouse": words typed after an alias are appended.
+# Aliases can't replace a command's own name. Edit here and run scripts/deploy.sh; the server picks up
+# changes without a restart (it re-reads ~/bannerlord/aliases.txt when it changes).
+
+sm = setmap
+rm = resetmap
+wu = warmup
+ew = endwarmup
+ewf = endwarmup --force

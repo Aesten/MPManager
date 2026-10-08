@@ -135,37 +135,54 @@ internal static class MissionFlow
         }
     }
 
-    public static string HoldWarmup(bool hold)
+    // Infinite warmup from now on: held in the current warmup, or the mission restarts into a held warmup.
+    public static string StartHeldWarmup()
     {
-        WarmupHeld = hold;
-        if (hold)
+        WarmupHeld = true;
+        if (CurrentWarmupState() != null)
         {
-            return Mission.Current?.GetMissionBehavior<MultiplayerWarmupComponent>() != null
-                ? "Warmup is held until !warmup end."
-                : "Warmup will be held from the next mission on, until !warmup end.";
+            return "Warmup is infinite until !endwarmup.";
         }
-        return "Warmup is no longer held.";
+        return Restart()
+            ? "Restarting into an infinite warmup (until !endwarmup)."
+            : "The next mission starts in an infinite warmup (until !endwarmup).";
     }
 
-    public static string EndWarmup(out bool ended)
+    // Releases a hold and ends warmup: the game's 30 s countdown, or at once with force.
+    public static string EndWarmup(bool force, out bool ended)
     {
-        ended = false;
         bool wasHeld = WarmupHeld;
         WarmupHeld = false;
+        ended = wasHeld;
+        MultiplayerWarmupComponent warmup = Mission.Current?.GetMissionBehavior<MultiplayerWarmupComponent>();
+        MultiplayerWarmupComponent.WarmupStates? state = CurrentWarmupState();
+        if (warmup == null || state == null || state == MultiplayerWarmupComponent.WarmupStates.Ended)
+        {
+            return wasHeld ? "Warmup is no longer infinite." : "Not in warmup.";
+        }
+        if (state == MultiplayerWarmupComponent.WarmupStates.InProgress)
+        {
+            warmup.EndWarmupProgress();
+            ended = true;
+        }
+        if (force)
+        {
+            // The ending countdown runs on the mission timer; when it has passed, warmup ends on the next tick.
+            Mission.Current.GetMissionBehavior<MultiplayerTimerComponent>()?.StartTimerAsServer(0f);
+            ended = true;
+            return "Warmup ends now.";
+        }
+        return ended ? "Warmup ends in 30 s." : "Warmup is already ending.";
+    }
+
+    private static MultiplayerWarmupComponent.WarmupStates? CurrentWarmupState()
+    {
         MultiplayerWarmupComponent warmup = Mission.Current?.GetMissionBehavior<MultiplayerWarmupComponent>();
         if (warmup == null || WarmupStateProperty == null)
         {
-            ended = wasHeld;
-            return wasHeld ? "Warmup is no longer held." : "Not in warmup.";
+            return null;
         }
-        var state = (MultiplayerWarmupComponent.WarmupStates)WarmupStateProperty.GetValue(warmup);
-        if (state != MultiplayerWarmupComponent.WarmupStates.InProgress)
-        {
-            return "Warmup is already ending.";
-        }
-        warmup.EndWarmupProgress();
-        ended = true;
-        return "Warmup ends in 30 s.";
+        return (MultiplayerWarmupComponent.WarmupStates)WarmupStateProperty.GetValue(warmup);
     }
 
     // Sets the map and/or cultures (null: unchanged) and restarts the mission with them.

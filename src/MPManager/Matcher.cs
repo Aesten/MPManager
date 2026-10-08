@@ -18,14 +18,16 @@ internal sealed class Choice
 
     public string Name { get; }
 
-    public override string ToString() => Name == Id ? Id : Name + " (" + Id + ")";
+    public override string ToString() => string.Equals(Name, Id, StringComparison.OrdinalIgnoreCase) ? Name : Name + " (" + Id + ")";
 }
 
 // Resolves what someone typed in chat (no autocomplete there) to one of a list of choices:
 // 1. a number: the choice at that position in the list (as printed by !maps and !factions);
 // 2. the exact id or name, ignoring case, spaces and punctuation;
 // 3. the only choice whose id or name contains what was typed ("2f" for mp_skirmish_map_002f, "emp" for empire);
-// 4. the closest spelling (edit distance), if it's clearly the best and close enough ("vladia" for vlandia).
+// 4. the closest spelling, if it's clearly the best and close enough: what was typed is compared with the
+//    best-matching part of each id and name, so "lighthose" finds mp_bnl_lighthouse (one letter off) despite
+//    the prefix. One mistake is allowed per 4 letters typed; 3 letters or fewer must match exactly (step 3).
 internal static class Matcher
 {
     public static Choice Resolve(string input, IList<Choice> choices, out string error)
@@ -70,10 +72,10 @@ internal static class Matcher
         }
 
         var ranked = choices
-            .Select(c => (Choice: c, Distance: Math.Min(Distance(key, Normalize(c.Id)), Distance(key, Normalize(c.Name)))))
+            .Select(c => (Choice: c, Distance: Math.Min(PartDistance(key, Normalize(c.Id)), PartDistance(key, Normalize(c.Name)))))
             .OrderBy(r => r.Distance)
             .ToList();
-        int tolerance = Math.Max(2, key.Length / 3);
+        int tolerance = key.Length / 4;
         if (ranked[0].Distance <= tolerance && (ranked.Count == 1 || ranked[1].Distance > ranked[0].Distance))
         {
             return ranked[0].Choice;
@@ -101,25 +103,22 @@ internal static class Matcher
         return sb.ToString();
     }
 
-    // Levenshtein distance.
-    private static int Distance(string a, string b)
+    // Edit distance between what was typed and its best-matching part of text (approximate substring match:
+    // skipping text before and after the match is free).
+    private static int PartDistance(string typed, string text)
     {
-        int[] previous = new int[b.Length + 1];
-        int[] current = new int[b.Length + 1];
-        for (int j = 0; j <= b.Length; j++)
-        {
-            previous[j] = j;
-        }
-        for (int i = 1; i <= a.Length; i++)
+        int[] previous = new int[text.Length + 1]; // all zeros: a match may start anywhere in text
+        int[] current = new int[text.Length + 1];
+        for (int i = 1; i <= typed.Length; i++)
         {
             current[0] = i;
-            for (int j = 1; j <= b.Length; j++)
+            for (int j = 1; j <= text.Length; j++)
             {
-                int cost = a[i - 1] == b[j - 1] ? 0 : 1;
+                int cost = typed[i - 1] == text[j - 1] ? 0 : 1;
                 current[j] = Math.Min(Math.Min(current[j - 1] + 1, previous[j] + 1), previous[j - 1] + cost);
             }
             (previous, current) = (current, previous);
         }
-        return previous[b.Length];
+        return previous.Min(); // a match may end anywhere in text
     }
 }

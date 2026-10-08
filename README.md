@@ -15,19 +15,30 @@ announced to everyone.
 
 | Command | Effect |
 |---|---|
-| `!help` | Lists the commands. |
-| `!maps` | Numbered list of the maps for the current mode (official, added with `add_map_to_usable_maps` / `add_map_to_automated_battle_pool`, and custom scenes in `Modules/Multiplayer/SceneObj`). |
-| `!map` | Shows the current mode, map and cultures. |
-| `!map <map> [team1 team2]` | Switches the map (and optionally the cultures) and restarts the mission. |
-| `!factions [team1 team2]` | Shows the cultures, or switches them and restarts the mission. |
-| `!restart` | Restarts the mission with the same map and cultures. |
-| `!warmup end` | Ends warmup now (30 s countdown). Also releases a hold. |
-| `!warmup hold` | Keeps warmup going, from now on and in later missions, until `!warmup end`. |
+| `!setmap <map> [team1 team2]` | Switches the map (and optionally the cultures) and restarts the mission. |
+| `!resetmap` | Restarts the mission with the same map and cultures. |
+| `!warmup` | Infinite warmup from now on, also in later missions. Restarts into warmup if the match has started. |
+| `!endwarmup [--force]` | Ends warmup with the game's 30 s countdown, or at once with `--force`. |
+| `!kick <player> [--confirm]` | Kicks the closest-named player after `!confirm` (within 30 s), or at once with `--confirm`. |
+| `!confirm` | Confirms a pending `!kick`. |
+| `!specs` | Lists the spectators. |
+| `!maps` | Numbered list of the maps for the current mode. |
+| `!help` | Lists the commands and aliases. |
 
-Maps and cultures can be given by number (from `!maps` / `!factions`), by id or display name, by any unique
-part of either (`trad`, `emp`, `vla`), or misspelled (`osrak insurection vla stur` works). Anyone can use
-`!help`, `!maps` and `!map` without arguments. Other mods' commands (MPBalancer's `!b`) are hidden from
+`!specs`, `!maps` and `!help` work for everyone. Other mods' commands (MPBalancer's `!b`) are hidden from
 chat the same way and still reach their mod.
+
+**Matching names.** Maps, cultures and players are typed without spaces and matched loosely: by number
+(from `!maps`), by id or display name, by any unique part (`lighthouse`, `vla`, `emp`), or misspelled
+(`lighthose`, `vatenborg`, `osracinsurection`). One mistake is allowed per four letters, compared with the
+closest part of the name. When it's ambiguous (`fort`), the candidates are listed instead. Official maps
+also have display names (`Osrac Insurrection` for `mp_battle_map_002`); custom maps only have their scene
+folder name. `!maps` lists the mode's official maps, maps added with `add_map_to_usable_maps` /
+`add_map_to_automated_battle_pool`, and every custom map in the server's `Modules/Multiplayer/SceneObj`.
+
+**Aliases** are defined in `scripts/server/aliases.txt` (deployed to `~/bannerlord/aliases.txt` and re-read
+when it changes, no restart): `sm = setmap` makes `!sm lighthouse` run `!setmap lighthouse`, and an alias
+can carry arguments (`ewf = endwarmup --force`).
 
 **The same mission again, quickly.** There are no map or culture votes. When a mission ends, the next
 one uses the same mode, map and cultures, unless a command changed them. The scoreboard after a mission
@@ -61,7 +72,7 @@ extension points and reflection instead, for example by taking the place of Chat
 On the server, `mpm` (installed as `~/bannerlord/mpm`, linked from `~/.local/bin`):
 
 ```sh
-mpm cmd /map trad          # a chat command, as an admin ("/" avoids bash's "!" history expansion)
+mpm cmd /setmap lighthouse  # a chat command, as an admin ("/" avoids bash's "!" history expansion)
 mpm cmd MaxNumberOfPlayers 12   # a server option or console command
 mpm logs [-f] [-n 100]     # recent log lines without noise, -f to follow; --all for everything
 mpm start | stop | restart | status
@@ -77,9 +88,15 @@ prints to your terminal unless you ask for it.
 Same server as mpbalancer (`ssh aesten@7900x`; set `MPM_HOST` to deploy elsewhere):
 
 ```sh
-scripts/deploy.sh                # build and install the module and the server scripts (run-server.sh, mpm)
+scripts/deploy.sh                # build and install the module and scripts/server/ (run-server.sh, mpm, aliases.txt)
 scripts/deploy.sh --restart      # ...then restart the server
+scripts/deploy-maps.sh [dirs]    # install custom maps (default: every map this PC's game has downloaded)
 ```
+
+`deploy-maps.sh` copies maps into the server's `Modules/Multiplayer/SceneObj`, replacing maps of the same
+name and keeping the rest. The game keeps maps downloaded from servers in its own
+`Modules/Multiplayer/SceneObj`, so by default that's what it installs. From the server, the map download
+helper sends them to players who don't have them. The server only sees new maps after a restart.
 
 `deploy.sh` also installs the server launcher, `~/bannerlord/run-server.sh` (source: `scripts/server/run-server.sh`). It starts the server with MPBalancer (installed by mpbalancer's own `deploy.sh`), plus MPManager whenever `Modules/MPManager` is installed:
 
@@ -103,4 +120,4 @@ scripts/deploy.sh --restart      # ...then restart the server
   command, on top of a base config on the server that holds the name, passwords and `start_game`.
 - `!mode` to switch between Skirmish and Battle, with each mode's map pool.
 - A per-team player cap with overflow to spectators (6 per team for Skirmish).
-- Adding and removing bots, kick and ban.
+- Adding and removing bots.

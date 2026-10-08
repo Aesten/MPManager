@@ -102,6 +102,7 @@ if [ "$INNER" = 1 ]; then
   cd "$SERVER_BIN"
   export MPM_CONSOLE_FIFO="$COMMAND_FIFO"
   export MPM_LOG_FILE
+  export MPM_ALIASES_FILE="$SCRIPT_DIR/aliases.txt"
   exec dotnet TaleWorlds.Starter.DotNetCore.Linux.dll \
     "_MODULES_*${MODULES}*_MODULES_" \
     /dedicatedcustomserverconfigfile "$CONFIG" \
