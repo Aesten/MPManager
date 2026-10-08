@@ -18,13 +18,15 @@ namespace MPManager;
 //   command changes them, the next-map options are the current mission's, so the same mission is played again.
 // - Endless: the rotation is switched on if the config didn't, and never runs out (vanilla shuts the server down
 //   after set_automated_battle_count battles).
-// - Short waits: 5 s of scoreboard after a mission instead of 15, 3 s before the next one instead of 10.
-//   Clients still count down from 15 after a mission and are moved on early.
+// - Short waits: 5 s of scoreboard after a mission that ends by itself instead of 15 (clients still count down
+//   from 15 and are moved on early), none after one ended by a command, and 1 s before the next mission instead
+//   of 10. The intermission itself can't be skipped: the next mission can only be started from there
+//   (ServerSideIntermissionManager.StartMissionAux), and starting it too early leaves the rotation waiting forever.
 // - Infinite warmup: every mission's warmup lasts until !endwarmup, with its countdown frozen.
 internal static class MissionFlow
 {
     private const float PostMatchSeconds = 5f;
-    private const float IntermissionSeconds = 3f;
+    private const float IntermissionSeconds = 1f;
     private const double WarmupFreezeIntervalSeconds = 0.5;
 
     private const BindingFlags Instance = BindingFlags.Instance | BindingFlags.NonPublic;
@@ -233,15 +235,19 @@ internal static class MissionFlow
         }
     }
 
-    // Ends the current mission; the rotation then starts the next one from the next-map options.
+    // Ends the current mission without the scoreboard; the rotation then starts the next one from the next-map options.
     public static bool Restart()
     {
-        MissionLobbyComponent lobby = Mission.Current?.GetMissionBehavior<MissionLobbyComponent>();
+        Mission mission = Mission.Current;
+        MissionLobbyComponent lobby = mission?.GetMissionBehavior<MissionLobbyComponent>();
         if (lobby == null || lobby.CurrentMultiplayerState == MissionLobbyComponent.MultiplayerGameState.Ending)
         {
             return false;
         }
         lobby.SetStateEndingAsServer();
+        // The end screen runs on the mission timer; when it has passed, the mission closes on the next tick.
+        mission.GetMissionBehavior<MultiplayerTimerComponent>()?.StartTimerAsServer(0f);
+        _postMatchShortened = mission;
         return true;
     }
 

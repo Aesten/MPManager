@@ -45,10 +45,13 @@ frozen: twice a second the server resends the warmup start time, slightly ahead,
 the full warmup time. If the server fills up, which normally ends warmup, the warmup is put back.
 
 **The same mission again, quickly.** There are no map or culture votes. When a mission ends, the next
-one uses the same mode, map and cultures, unless a command changed them. The scoreboard after a mission
-lasts 5 s instead of 15 (clients still count down from 15 and are moved on early), and the wait before the
-next one is 3 s instead of 10. If the config doesn't turn on the automated rotation, MPManager does, and
-the server never stops after a set number of battles.
+one uses the same mode, map and cultures, unless a command changed them. After a mission that ends by
+itself, the scoreboard shows for 5 s instead of 15 (clients still count down from 15 and are moved on
+early). A mission ended by `!setmap` or `!resetmap` closes at once, with no scoreboard. The intermission
+before the next mission lasts 1 s instead of 10; it can't be skipped, because the next mission can only
+be started from there. A switch by command takes about a second on the server, plus the map loading on
+clients. If the config doesn't turn on the automated rotation, MPManager does, and the server never stops
+after a set number of battles.
 
 **Logs and server commands.** MPManager writes its own log, `~/bannerlord/mpmanager.log`: every line as
 it's printed, dated, without the engine's blank lines or the lobby keepalive (four lines every 2 s).
