@@ -17,8 +17,8 @@ announced to everyone.
 |---|---|
 | `!setmap <map> [team1 team2]` | Switches the map (and optionally the cultures) and restarts the mission. |
 | `!resetmap` | Restarts the mission with the same map and cultures. |
-| `!warmup` | Infinite warmup from now on, also in later missions. Restarts into warmup if the match has started. |
-| `!endwarmup [--force]` | Ends warmup with the game's 30 s countdown, or at once with `--force`. |
+| `!warmup` | Back to warmup: cancels an ending warmup, or restarts the mission if the match has started. |
+| `!endwarmup [--force]` | Ends this mission's warmup with the game's 30 s countdown, or with `--force` the 3 s "battle starting" one. |
 | `!kick <player> [--confirm]` | Kicks the closest-named player after `!confirm` (within 30 s), or at once with `--confirm`. |
 | `!confirm` | Confirms a pending `!kick`. |
 | `!specs` | Lists the spectators. |
@@ -39,6 +39,10 @@ folder name. `!maps` lists the mode's official maps, maps added with `add_map_to
 **Aliases** are defined in `scripts/server/aliases.txt` (deployed to `~/bannerlord/aliases.txt` and re-read
 when it changes, no restart): `sm = setmap` makes `!sm lighthouse` run `!setmap lighthouse`, and an alias
 can carry arguments (`ewf = endwarmup --force`).
+
+**Infinite warmup.** Every mission starts in a warmup that lasts until `!endwarmup`, with its timer
+frozen: twice a second the server resends the warmup start time, slightly ahead, so clients keep showing
+the full warmup time. If the server fills up, which normally ends warmup, the warmup is put back.
 
 **The same mission again, quickly.** There are no map or culture votes. When a mission ends, the next
 one uses the same mode, map and cultures, unless a command changed them. The scoreboard after a mission

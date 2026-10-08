@@ -32,8 +32,8 @@ internal static class Commands
         new Command("specs", "", "List the spectators.", admin: false, Specs),
         new Command("setmap", "<map> [team1 team2]", "Switch to a map (and cultures) and restart. Partial or misspelled names, and numbers from !maps, work.", admin: true, SetMap),
         new Command("resetmap", "", "Restart the mission with the same map and cultures.", admin: true, ResetMap),
-        new Command("warmup", "", "Infinite warmup, from now on (restarts into warmup if the match has started).", admin: true, Warmup),
-        new Command("endwarmup", "[--force]", "End warmup: 30 s countdown, or at once with --force.", admin: true, EndWarmup),
+        new Command("warmup", "", "Back to warmup: cancels an ending warmup, or restarts the mission if the match has started.", admin: true, Warmup),
+        new Command("endwarmup", "[--force]", "End this mission's warmup (infinite until then): 30 s countdown, or 3 s with --force.", admin: true, EndWarmup),
         new Command("kick", "<player> [--confirm]", "Kick the closest-named player; confirm with !confirm or --confirm.", admin: true, Kick),
         new Command("confirm", "", "Confirm a pending !kick.", admin: true, Confirm),
     };

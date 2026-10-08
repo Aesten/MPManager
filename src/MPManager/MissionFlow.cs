@@ -4,6 +4,7 @@ using System.Linq;
 using System.Reflection;
 using TaleWorlds.Core;
 using TaleWorlds.Engine;
+using NetworkMessages.FromServer;
 using TaleWorlds.MountAndBlade;
 using TaleWorlds.MountAndBlade.ListedServer;
 using TaleWorlds.ObjectSystem;
@@ -19,12 +20,12 @@ namespace MPManager;
 //   after set_automated_battle_count battles).
 // - Short waits: 5 s of scoreboard after a mission instead of 15, 3 s before the next one instead of 10.
 //   Clients still count down from 15 after a mission and are moved on early.
-// - Warmup hold: keeps warmup running until released.
+// - Infinite warmup: every mission's warmup lasts until !endwarmup, with its countdown frozen.
 internal static class MissionFlow
 {
     private const float PostMatchSeconds = 5f;
     private const float IntermissionSeconds = 3f;
-    private const float WarmupRefreshBelowSeconds = 40f; // warmup ends by itself at 30 s left
+    private const double WarmupFreezeIntervalSeconds = 0.5;
 
     private const BindingFlags Instance = BindingFlags.Instance | BindingFlags.NonPublic;
 
@@ -33,11 +34,14 @@ internal static class MissionFlow
     private static readonly FieldInfo RemainingBattlesField = typeof(ServerSideIntermissionManager).GetField("_remainedAutomatedBattleCount", Instance);
     private static readonly FieldInfo WaitTimeField = typeof(ServerSideIntermissionManager).GetField("_automatedBattleWaitTimeInSeconds", Instance);
     private static readonly PropertyInfo WarmupStateProperty = typeof(MultiplayerWarmupComponent).GetProperty("WarmupState", Instance);
+    private static readonly FieldInfo WarmupStartTimeField = typeof(MultiplayerWarmupComponent).GetField("_currentStateStartTime", Instance);
 
     private static Mission _postMatchShortened;
     private static bool _rotationLogged;
 
-    public static bool WarmupHeld { get; private set; }
+    // The mission whose warmup !endwarmup ended; every other mission's warmup is infinite.
+    private static Mission _warmupEnded;
+    private static DateTime _nextWarmupFreeze;
 
     public static string GameType => MultiplayerOptions.OptionType.GameType.GetStrValue();
 
@@ -52,7 +56,7 @@ internal static class MissionFlow
         if (mission != null)
         {
             ShortenPostMatch(mission);
-            if (WarmupHeld)
+            if (mission != _warmupEnded)
             {
                 HoldWarmup(mission);
             }
@@ -115,57 +119,71 @@ internal static class MissionFlow
         }
     }
 
-    // Restarts the warmup timer before it runs out, and undoes the warmup ending when the server fills up.
-    // Setting WarmupState through its setter tells the clients, so their countdown restarts too.
+    // Keeps warmup going with its countdown frozen. Twice a second the server timer restarts (so warmup never
+    // reaches its 30 s end) and clients get a warmup start time half a second ahead, so they keep showing the full
+    // warmup time; a "warmup in progress" message only restarts the client's timer. The start time is also kept
+    // for players who join later. If warmup started ending by itself (a full server), it's put back.
     private static void HoldWarmup(Mission mission)
     {
         MultiplayerWarmupComponent warmup = mission.GetMissionBehavior<MultiplayerWarmupComponent>();
         MultiplayerTimerComponent timer = mission.GetMissionBehavior<MultiplayerTimerComponent>();
-        if (warmup == null || timer == null || WarmupStateProperty == null)
+        if (warmup == null || timer == null || WarmupStateProperty == null || WarmupStartTimeField == null)
         {
             return;
         }
         // Once the mission is ending (!setmap, !resetmap), the shared mission timer counts down the end screen:
-        // restarting it as warmup kept the mission from ever ending. The hold carries on in the next mission.
+        // restarting it as warmup kept the mission from ever ending.
         if (mission.GetMissionBehavior<MissionLobbyComponent>()?.CurrentMultiplayerState == MissionLobbyComponent.MultiplayerGameState.Ending)
         {
             return;
         }
         var state = (MultiplayerWarmupComponent.WarmupStates)WarmupStateProperty.GetValue(warmup);
-        if (state == MultiplayerWarmupComponent.WarmupStates.Ending
-            || (state == MultiplayerWarmupComponent.WarmupStates.InProgress && timer.GetRemainingTime(isSynched: false) < WarmupRefreshBelowSeconds))
+        if (state == MultiplayerWarmupComponent.WarmupStates.Ending)
         {
             WarmupStateProperty.SetValue(warmup, MultiplayerWarmupComponent.WarmupStates.InProgress);
-            timer.StartTimerAsServer(MultiplayerWarmupComponent.TotalWarmupDuration);
-            MPManagerSubModule.Log("Warmup held: " + (state == MultiplayerWarmupComponent.WarmupStates.Ending ? "cancelled the end of warmup." : "restarted the warmup timer."));
+            MPManagerSubModule.Log("Warmup is infinite: cancelled its end (!endwarmup ends it).");
         }
+        else if (state != MultiplayerWarmupComponent.WarmupStates.InProgress || DateTime.UtcNow < _nextWarmupFreeze)
+        {
+            return;
+        }
+        _nextWarmupFreeze = DateTime.UtcNow.AddSeconds(WarmupFreezeIntervalSeconds);
+        timer.StartTimerAsServer(MultiplayerWarmupComponent.TotalWarmupDuration);
+        MissionTime start = MissionTime.SecondsFromNow((float)WarmupFreezeIntervalSeconds);
+        WarmupStartTimeField.SetValue(warmup, start);
+        GameNetwork.BeginBroadcastModuleEvent();
+        GameNetwork.WriteMessage(new WarmupStateChange(MultiplayerWarmupComponent.WarmupStates.InProgress, start.NumberOfTicks));
+        GameNetwork.EndBroadcastModuleEvent(GameNetwork.EventBroadcastFlags.None);
     }
 
-    // Infinite warmup from now on: held in the current warmup, or the mission restarts into a held warmup.
+    // !warmup: back to an infinite warmup. In warmup, an ending warmup is put back; during the match, the mission
+    // restarts (it starts in warmup).
     public static string StartHeldWarmup()
     {
-        WarmupHeld = true;
-        if (CurrentWarmupState() != null)
+        Mission mission = Mission.Current;
+        if (CurrentWarmupState() is MultiplayerWarmupComponent.WarmupStates state && state != MultiplayerWarmupComponent.WarmupStates.Ended)
         {
-            return "Warmup is infinite until !endwarmup.";
+            _warmupEnded = null;
+            return "Warmup is infinite again, until !endwarmup.";
         }
+        _warmupEnded = null;
         return Restart()
-            ? "Restarting into an infinite warmup (until !endwarmup)."
-            : "The next mission starts in an infinite warmup (until !endwarmup).";
+            ? "Restarting into warmup."
+            : "The next mission starts in warmup.";
     }
 
-    // Releases a hold and ends warmup: the game's 30 s countdown, or at once with force.
+    // !endwarmup: ends this mission's warmup with the game's 30 s countdown, or with force at once (the game's
+    // 3 s "battle starting" countdown follows). The next mission's warmup is infinite again.
     public static string EndWarmup(bool force, out bool ended)
     {
-        bool wasHeld = WarmupHeld;
-        WarmupHeld = false;
-        ended = wasHeld;
+        ended = false;
         MultiplayerWarmupComponent warmup = Mission.Current?.GetMissionBehavior<MultiplayerWarmupComponent>();
         MultiplayerWarmupComponent.WarmupStates? state = CurrentWarmupState();
         if (warmup == null || state == null || state == MultiplayerWarmupComponent.WarmupStates.Ended)
         {
-            return wasHeld ? "Warmup is no longer infinite." : "Not in warmup.";
+            return "Not in warmup.";
         }
+        _warmupEnded = Mission.Current;
         if (state == MultiplayerWarmupComponent.WarmupStates.InProgress)
         {
             warmup.EndWarmupProgress();
