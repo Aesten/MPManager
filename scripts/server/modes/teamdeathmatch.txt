@@ -1,4 +1,5 @@
 # Team deathmatch, for testing: vanilla TDM maps, and the only mode with !bots. Default when the server starts.
+# Starts on mp_tdm_map_001, Aserai vs Khuzait, 5 bots per team.
 aliases = tdm
 gametype = TeamDeathmatch
 maps = mp_tdm_map_001 official
@@ -6,6 +7,10 @@ bots = yes
 default = yes
 
 # Options for the next mission when switching to this mode (same lines as a server config).
+CultureTeam1 aserai
+CultureTeam2 khuzait
+NumberOfBotsTeam1 5
+NumberOfBotsTeam2 5
 MaxNumberOfPlayers 50
 MapTimeLimit 60
 MinScoreToWinMatch 120000

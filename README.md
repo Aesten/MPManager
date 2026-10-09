@@ -59,17 +59,17 @@ RoundTotal 19                   # options, one per line
 type: its own list in `Native/ModuleData/Multiplayer/MultiplayerScenes.xml`, then the other scenes in
 `Native/SceneObj` with the game type's prefix, such as `mp_skirmish_`, without test scenes), `custom` (the
 maps in the server's `Modules/Multiplayer/SceneObj`), and `-id` to leave one out. The first map is used when
-switching to the mode, unless the current map is in its pool.
+switching to the mode (unless `!mode` names one); cultures and bots come from the mode's option lines.
 
-| Mode | Game type | Maps | Bots |
+| Mode | Starts on | Maps | Bots |
 |---|---|---|---|
-| `teamdeathmatch` (`tdm`), default | TeamDeathmatch | `mp_tdm_map_001`, then the official TDM maps | yes |
-| `skirmish` (`skirm`) | Skirmish | official Skirmish maps and custom maps, without the two groupfight maps | no |
-| `groupfight` (`gf`) | Battle | `mp_groupfight`, `mp_ie_performancearena` | no |
+| `teamdeathmatch` (`tdm`), default | `mp_tdm_map_001`, Aserai vs Khuzait, 5 bots each | official TDM maps | yes |
+| `skirmish` (`skirm`) | Xauna (`mp_skirmish_map_007`), Vlandia vs Battania | official Skirmish maps and custom maps, without the two groupfight maps | no |
+| `groupfight` (`gf`) | `mp_groupfight`, Vlandia vs Vlandia | `mp_groupfight`, `mp_ie_performancearena` | no |
 
 The base config on the server (`Modules/Native/config.txt`, not in this repo; a copy is in
 `~/bannerlord/configs/base-config.txt`) only sets the server name, the passwords, the default mode's game
-type and map, and `start_game`. Everything else comes from the modes.
+type and map, and `start_game`. MPManager doesn't read anything else in `~/bannerlord/configs/`. Everything else comes from the modes.
 
 **Aliases** are defined in `scripts/server/aliases.txt` (deployed to `~/bannerlord/aliases.txt` and re-read
 when it changes, no restart): `sm = setmap` makes `!sm lighthouse` run `!setmap lighthouse`, and an alias

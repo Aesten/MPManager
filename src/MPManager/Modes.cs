@@ -14,7 +14,8 @@ namespace MPManager;
 //   gametype = Battle       the game's game type
 //   maps = mp_groupfight mp_ie_performancearena
 //                           the map pool: map ids, "official" (the game's maps for the game type), "custom" (maps in
-//                           Modules/Multiplayer/SceneObj), "-id" to leave one out
+//                           Modules/Multiplayer/SceneObj), "-id" to leave one out; the first map is the one the
+//                           mode starts on
 //   bots = yes              whether !bots works (otherwise bots are kept at 0)
 //   default = yes           applied when the server starts
 internal sealed class Mode
@@ -108,16 +109,11 @@ internal static class Modes
         MPManagerSubModule.Log("Default mode: " + mode.Name + " (" + mode.GameType + " on " + MultiplayerOptions.OptionType.Map.GetStrValue() + ").");
     }
 
-    // Sets the mode, and the map (null: the current one if the mode has it, else its first), for the next mission
-    // (and the current options too, when current is set: at startup, or between missions).
+    // Sets the mode, its options, and the map (null: the mode's first map), for the next mission (and the current
+    // options too, when current is set: at startup, or between missions).
     public static string Apply(Mode mode, string map, bool current)
     {
-        List<Choice> maps = mode.Maps();
-        if (map == null)
-        {
-            string now = MultiplayerOptions.OptionType.Map.GetStrValue();
-            map = maps.Any(m => m.Id == now) ? now : maps.FirstOrDefault()?.Id;
-        }
+        map ??= mode.Maps().FirstOrDefault()?.Id;
         if (map == null)
         {
             return "Mode " + mode.Name + " has no maps.";

@@ -1,10 +1,13 @@
 # Groupfight: Battle on the groupfight and performance arena maps. No bots.
+# Starts on mp_groupfight, Vlandia vs Vlandia.
 aliases = gf
 gametype = Battle
 maps = mp_groupfight mp_ie_performancearena
 bots = no
 
 # Options for the next mission when switching to this mode (same lines as a server config).
+CultureTeam1 vlandia
+CultureTeam2 vlandia
 MaxNumberOfPlayers 50
 RoundTotal 19
 RoundTimeLimit 420

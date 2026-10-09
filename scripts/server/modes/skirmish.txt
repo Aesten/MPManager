@@ -1,10 +1,13 @@
 # Skirmish, for matches: official skirmish maps and custom maps (not the groupfight ones). No bots.
+# Starts on Xauna (mp_skirmish_map_007), Vlandia vs Battania.
 aliases = skirm
 gametype = Skirmish
-maps = official custom -mp_groupfight -mp_ie_performancearena
+maps = mp_skirmish_map_007 official custom -mp_groupfight -mp_ie_performancearena
 bots = no
 
 # Options for the next mission when switching to this mode (same lines as a server config).
+CultureTeam1 vlandia
+CultureTeam2 battania
 MaxNumberOfPlayers 100
 RoundTotal 5
 RoundTimeLimit 420
