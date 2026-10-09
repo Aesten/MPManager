@@ -1,0 +1,19 @@
+# Groupfight: Battle on the groupfight and performance arena maps. No bots.
+aliases = gf
+gametype = Battle
+maps = mp_groupfight mp_ie_performancearena
+bots = no
+
+# Options for the next mission when switching to this mode (same lines as a server config).
+MaxNumberOfPlayers 50
+RoundTotal 19
+RoundTimeLimit 420
+RoundPreparationTimeLimit 12
+UnlimitedGold True
+SingleSpawn True
+AutoTeamBalanceThreshold 0
+FriendlyFireDamageMeleeFriendPercent 100
+FriendlyFireDamageMeleeSelfPercent 0
+FriendlyFireDamageRangedFriendPercent 100
+FriendlyFireDamageRangedSelfPercent 0
+MinNumberOfPlayersForMatchStart 1

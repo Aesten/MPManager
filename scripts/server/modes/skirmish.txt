@@ -1,0 +1,18 @@
+# Skirmish, for matches: official skirmish maps and custom maps (not the groupfight ones). No bots.
+aliases = skirm
+gametype = Skirmish
+maps = official custom -mp_groupfight -mp_ie_performancearena
+bots = no
+
+# Options for the next mission when switching to this mode (same lines as a server config).
+MaxNumberOfPlayers 100
+RoundTotal 5
+RoundTimeLimit 420
+RoundPreparationTimeLimit 12
+UnlimitedGold False
+AutoTeamBalanceThreshold 0
+FriendlyFireDamageMeleeFriendPercent 100
+FriendlyFireDamageMeleeSelfPercent 0
+FriendlyFireDamageRangedFriendPercent 100
+FriendlyFireDamageRangedSelfPercent 0
+MinNumberOfPlayersForMatchStart 1

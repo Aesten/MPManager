@@ -17,6 +17,8 @@ answers privately, and changes are announced to everyone. Admin commands need th
 |---|---|---|---|
 | `!setmap <map> [team1 team2]` | `!sm` | admin | Switches the map (and optionally the cultures) and restarts the mission. `current` or `c` keeps the map: `!setmap c vla stur`. |
 | `!resetmap` | `!rm` | admin | Restarts the mission with the same map and cultures. |
+| `!mode [mode] [map]` | | admin | Lists the modes, or switches to one (`skirmish`/`skirm`, `groupfight`/`gf`, `teamdeathmatch`/`tdm`), optionally on a map, and restarts. |
+| `!bots [team1 team2]` | | admin | Shows or sets the bots per team, e.g. `!bots 0 10`. Only in modes with bots (`tdm`); lowering removes bots at once. |
 | `!warmup` | `!wu` | admin | Back to warmup: cancels an ending warmup, or restarts the mission if the match has started. |
 | `!endwarmup [--force]` | `!ew`, `!ewf` (= `--force`) | admin | Ends this mission's warmup with the game's 30 s countdown, or with `--force` the 3 s "battle starting" one. |
 | `!kick <player> [--confirm]` | | admin | Kicks the closest-named player after `!confirm` (within 30 s), or at once with `--confirm`. |
@@ -40,13 +42,34 @@ it changes, no restart): `lighthouse = mp_bnl_lighthouse` names a map, a map can
 `!maps` shows the first one. Maps without a name are shown and matched by their id. The game's own display
 names aren't used.
 
-`!maps` lists, for the current mode: the game's own map list (`Native/ModuleData/Multiplayer/MultiplayerScenes.xml`),
-maps added with `add_map_to_usable_maps` / `add_map_to_automated_battle_pool`, the other official scenes that
-ship with the game (`Native/SceneObj`, by prefix: `mp_skirmish_` for Skirmish, `mp_battle_` and `mp_skirmish_`
-for Battle, `mp_sergeant_`, `mp_siege_`, `mp_tdm_`, `mp_duel_`), every custom map in the server's
-`Modules/Multiplayer/SceneObj`, and every map named in `maps.txt`. Test scenes (`mp_skirmish_spawn_test`)
-are left out. Scenes the game leaves out of its lists (winter versions, `mp_skirmish_map_004` to `006`,
-`008`, `013`, the Battania maps) load like any other but may never have been finished.
+**Modes** are defined in `scripts/server/modes/`, one file per mode (deployed to `~/bannerlord/modes/` and
+re-read when they change, no restart). The file name is the mode's name. A mode file has settings and option
+lines (like a server config) that are applied to the next mission when switching to the mode:
+
+```
+aliases = gf                    # other names for !mode
+gametype = Battle               # the game's game type
+maps = mp_groupfight mp_ie_performancearena
+bots = no                       # whether !bots works; otherwise bots are kept at 0
+default = yes                   # applied when the server starts (only one mode)
+RoundTotal 19                   # options, one per line
+```
+
+`maps` is the mode's map pool for `!maps` and `!setmap`: map ids, `official` (the game's maps for the game
+type: its own list in `Native/ModuleData/Multiplayer/MultiplayerScenes.xml`, then the other scenes in
+`Native/SceneObj` with the game type's prefix, such as `mp_skirmish_`, without test scenes), `custom` (the
+maps in the server's `Modules/Multiplayer/SceneObj`), and `-id` to leave one out. The first map is used when
+switching to the mode, unless the current map is in its pool.
+
+| Mode | Game type | Maps | Bots |
+|---|---|---|---|
+| `teamdeathmatch` (`tdm`), default | TeamDeathmatch | `mp_tdm_map_001`, then the official TDM maps | yes |
+| `skirmish` (`skirm`) | Skirmish | official Skirmish maps and custom maps, without the two groupfight maps | no |
+| `groupfight` (`gf`) | Battle | `mp_groupfight`, `mp_ie_performancearena` | no |
+
+The base config on the server (`Modules/Native/config.txt`, not in this repo; a copy is in
+`~/bannerlord/configs/base-config.txt`) only sets the server name, the passwords, the default mode's game
+type and map, and `start_game`. Everything else comes from the modes.
 
 **Aliases** are defined in `scripts/server/aliases.txt` (deployed to `~/bannerlord/aliases.txt` and re-read
 when it changes, no restart): `sm = setmap` makes `!sm lighthouse` run `!setmap lighthouse`, and an alias
@@ -136,8 +159,4 @@ helper sends them to players who don't have them. The server only sees new maps 
 
 ## Planned
 
-- Profiles: hot-swappable presets (bot debugging, Skirmish matches, Battle training) applied with a chat
-  command, on top of a base config on the server that holds the name, passwords and `start_game`.
-- `!mode` to switch between Skirmish and Battle, with each mode's map pool.
 - A per-team player cap with overflow to spectators (6 per team for Skirmish).
-- Adding and removing bots.

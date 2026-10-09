@@ -14,6 +14,18 @@ public class MPManagerSubModule : MBSubModuleBase
         ServerLog.Open();
         LogFilter.Install();
         CommandInput.Start();
+        // After the server config is applied, before the first mission.
+        TaleWorlds.MountAndBlade.ListedServer.InitialListedGameServerState.OnActivated += () =>
+        {
+            try
+            {
+                Modes.ApplyDefault();
+            }
+            catch (Exception e)
+            {
+                Log("Could not apply the default mode: " + e);
+            }
+        };
         Log("Loaded.");
     }
 

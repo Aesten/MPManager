@@ -1,0 +1,20 @@
+# Team deathmatch, for testing: vanilla TDM maps, and the only mode with !bots. Default when the server starts.
+aliases = tdm
+gametype = TeamDeathmatch
+maps = mp_tdm_map_001 official
+bots = yes
+default = yes
+
+# Options for the next mission when switching to this mode (same lines as a server config).
+MaxNumberOfPlayers 50
+MapTimeLimit 60
+MinScoreToWinMatch 120000
+RespawnPeriodTeam1 3
+RespawnPeriodTeam2 3
+UnlimitedGold True
+AutoTeamBalanceThreshold 0
+FriendlyFireDamageMeleeFriendPercent 0
+FriendlyFireDamageMeleeSelfPercent 0
+FriendlyFireDamageRangedFriendPercent 0
+FriendlyFireDamageRangedSelfPercent 0
+MinNumberOfPlayersForMatchStart 1

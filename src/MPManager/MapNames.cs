@@ -7,8 +7,8 @@ namespace MPManager;
 
 // Names for maps, from MPM_MAP_NAMES_FILE (~/bannerlord/maps.txt, from scripts/server/maps.txt), re-read when it
 // changes. Lines are "name = map id"; a map can have several names, and the first one is how it's shown.
-// Names are used by !maps and matched by !setmap; maps without a name are shown and matched by id. A map named
-// here is offered in every mode, even if !maps wouldn't list it otherwise.
+// Names are used by !maps and matched by !setmap; maps without a name are shown and matched by id. Which maps a
+// mode offers is set in its mode file.
 internal static class MapNames
 {
     private static readonly Dictionary<string, List<string>> NamesById = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
@@ -25,12 +25,6 @@ internal static class MapNames
     {
         IReadOnlyList<string> names = For(id);
         return names.Count == 0 ? id : names[0] + " (" + id + ")";
-    }
-
-    public static IEnumerable<string> Ids()
-    {
-        Load();
-        return NamesById.Keys.ToList();
     }
 
     private static void Load()

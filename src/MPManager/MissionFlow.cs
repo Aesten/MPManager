@@ -284,37 +284,22 @@ internal static class MissionFlow
         ["Duel"] = new[] { "mp_duel_" },
     };
 
-    // Maps for a game type, in a stable order: the game type's official list, maps added with add_map_to_usable_maps
-    // / add_map_to_automated_battle_pool, the other official scenes for the game type, then custom scenes in
-    // Modules/Multiplayer/SceneObj, then maps named in maps.txt (MapNames). Test scenes (mp_skirmish_spawn_test)
-    // are left out.
-    public static List<Choice> Maps(string gameType)
+    // The game's maps for a game type: its own list, then the other official scenes with the game type's prefix.
+    // Test scenes (mp_skirmish_spawn_test) are left out.
+    public static List<string> OfficialMaps(string gameType)
     {
-        List<string> ids = new List<string>();
-        void Add(IEnumerable<string> source)
-        {
-            if (source == null)
-            {
-                return;
-            }
-            foreach (string id in source)
-            {
-                if (!string.IsNullOrEmpty(id) && !ids.Contains(id))
-                {
-                    ids.Add(id);
-                }
-            }
-        }
-        Add(MultiplayerGameTypes.GetGameTypeInfo(gameType)?.Scenes);
-        Add(MultiplayerIntermissionVotingManager.Instance.GetUsableMaps(gameType));
-        Add(ServerSideIntermissionManager.Instance?.AutomatedMapPool);
+        List<string> ids = new List<string>(MultiplayerGameTypes.GetGameTypeInfo(gameType)?.Scenes ?? new List<string>());
         if (OfficialScenePrefixes.TryGetValue(gameType, out string[] prefixes))
         {
-            Add(ModuleScenes("Native").Where(id => prefixes.Any(p => id.StartsWith(p, StringComparison.OrdinalIgnoreCase))).OrderBy(id => id));
+            ids.AddRange(ModuleScenes("Native").Where(id => prefixes.Any(p => id.StartsWith(p, StringComparison.OrdinalIgnoreCase))).OrderBy(id => id));
         }
-        Add(ModuleScenes("Multiplayer"));
-        Add(MapNames.Ids());
-        return ids.Where(id => !id.EndsWith("_test", StringComparison.OrdinalIgnoreCase)).Select(id => new Choice(id, MapNames.For(id))).ToList();
+        return ids.Distinct().Where(id => !id.EndsWith("_test", StringComparison.OrdinalIgnoreCase)).ToList();
+    }
+
+    // Custom maps: the scenes in Modules/Multiplayer/SceneObj.
+    public static List<string> CustomMaps()
+    {
+        return ModuleScenes("Multiplayer").OrderBy(id => id).ToList();
     }
 
     private static string[] ModuleScenes(string module)
@@ -326,6 +311,48 @@ internal static class MissionFlow
         catch (Exception)
         {
             return Array.Empty<string>();
+        }
+    }
+
+    // Bots per team, now and in later missions. Extra bots are faded out; the spawner counts them as removed
+    // (SpawningBehaviorBase.OnAgentRemoved) and fills up to the new numbers only.
+    public static void SetBots(int team1, int team2)
+    {
+        foreach (var access in new[] { MultiplayerOptions.MultiplayerOptionsAccessMode.CurrentMapOptions, MultiplayerOptions.MultiplayerOptionsAccessMode.NextMapOptions })
+        {
+            MultiplayerOptions.OptionType.NumberOfBotsTeam1.SetValue(team1, access);
+            MultiplayerOptions.OptionType.NumberOfBotsTeam2.SetValue(team2, access);
+        }
+        Mission mission = Mission.Current;
+        if (mission == null)
+        {
+            return;
+        }
+        RemoveExtraBots(mission, TaleWorlds.Core.BattleSideEnum.Attacker, team1);
+        RemoveExtraBots(mission, TaleWorlds.Core.BattleSideEnum.Defender, team2);
+    }
+
+    public static int CountBots(TaleWorlds.Core.BattleSideEnum side)
+    {
+        return Bots(Mission.Current, side).Count;
+    }
+
+    private static List<Agent> Bots(Mission mission, TaleWorlds.Core.BattleSideEnum side)
+    {
+        if (mission == null)
+        {
+            return new List<Agent>();
+        }
+        return mission.Agents
+            .Where(a => a.IsHuman && a.IsActive() && a.MissionPeer == null && a.OwningAgentMissionPeer == null && a.Team?.Side == side)
+            .ToList();
+    }
+
+    private static void RemoveExtraBots(Mission mission, TaleWorlds.Core.BattleSideEnum side, int keep)
+    {
+        foreach (Agent bot in Bots(mission, side).Skip(Math.Max(0, keep)))
+        {
+            bot.FadeOut(hideInstantly: true, hideMount: true);
         }
     }
 

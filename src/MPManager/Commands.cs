@@ -28,6 +28,8 @@ internal static class Commands
     {
         new Command("help", "[command]", "List the commands with their aliases, or show one command's usage.", admin: false, Help),
         new Command("maps", "", "Numbered list of the maps for the current mode.", admin: false, ListMaps),
+        new Command("mode", "[mode] [map]", "Show the modes, or switch to one (optionally on a map) and restart.", admin: true, SwitchMode),
+        new Command("bots", "[team1 team2]", "Show or set the number of bots per team (modes with bots only, e.g. tdm).", admin: true, Bots),
         new Command("specs", "", "List the spectators.", admin: false, Specs),
         new Command("ready", "", "Skirmish/Battle warmup: your team is ready. When both teams are ready within 60 s, warmup ends (30 s).", admin: false, Ready),
         new Command("notready", "", "Take back your team's !ready, or cancel the countdown it started.", admin: false, NotReady),
@@ -193,8 +195,8 @@ internal static class Commands
 
     private static void ListMaps(Caller caller, string[] args)
     {
-        List<Choice> maps = MissionFlow.Maps(MissionFlow.GameType);
-        caller.Reply(MissionFlow.GameType + " maps (now: " + MapNames.Display(MultiplayerOptions.OptionType.Map.GetStrValue()) + "):");
+        List<Choice> maps = Modes.CurrentMaps();
+        caller.Reply((Modes.Current?.Name ?? MissionFlow.GameType) + " maps (now: " + MapNames.Display(MultiplayerOptions.OptionType.Map.GetStrValue()) + "):");
         for (int i = 0; i < maps.Count; i++)
         {
             caller.Reply((i + 1) + ". " + maps[i]);
@@ -231,7 +233,7 @@ internal static class Commands
         }
         else
         {
-            map = Matcher.Resolve(args[0], MissionFlow.Maps(MissionFlow.GameType), out error);
+            map = Matcher.Resolve(args[0], Modes.CurrentMaps(), out error);
         }
         if (map == null)
         {
@@ -270,6 +272,74 @@ internal static class Commands
         {
             caller.Reply(reply);
         }
+    }
+
+    private static void SwitchMode(Caller caller, string[] args)
+    {
+        IReadOnlyList<Mode> modes = Modes.List();
+        if (args.Length == 0)
+        {
+            caller.Reply("Mode: " + (Modes.Current?.Name ?? MissionFlow.GameType + " (no mode file)") + ".");
+            foreach (Mode m in modes)
+            {
+                caller.Reply("!mode " + m.Name + (m.Aliases.Count > 0 ? "  (" + string.Join(", ", m.Aliases) + ")" : "") + ": " + m.GameType + (m.BotsAllowed ? ", bots" : ""));
+            }
+            return;
+        }
+        if (args.Length > 2)
+        {
+            caller.Reply("Usage: !mode <mode> [map]");
+            return;
+        }
+        Choice choice = Matcher.Resolve(args[0], modes.Select(m => m.ToChoice()).ToList(), out string error);
+        if (choice == null)
+        {
+            caller.Reply(modes.Count == 0 ? "No modes are set up (scripts/server/modes/)." : error);
+            return;
+        }
+        Mode mode = modes.First(m => m.Name == choice.Id);
+        string map = null;
+        if (args.Length == 2)
+        {
+            Choice mapChoice = Matcher.Resolve(args[1], mode.Maps(), out error);
+            if (mapChoice == null)
+            {
+                caller.Reply(error);
+                return;
+            }
+            map = mapChoice.Id;
+        }
+        string failure = Modes.Apply(mode, map, current: Mission.Current == null);
+        if (failure != null)
+        {
+            caller.Reply(failure);
+            return;
+        }
+        MissionFlow.Restart();
+        caller.Announce("Switching to " + mode.Name + " on " + MapNames.Display(MissionFlow.Next(MultiplayerOptions.OptionType.Map)) + ".");
+    }
+
+    private static void Bots(Caller caller, string[] args)
+    {
+        if (Modes.Current?.BotsAllowed != true)
+        {
+            caller.Reply("No bots in this mode" + (Modes.List().Any(m => m.BotsAllowed) ? "; switch to " + string.Join(" or ", Modes.List().Where(m => m.BotsAllowed).Select(m => m.Name)) + "." : "."));
+            return;
+        }
+        if (args.Length == 0)
+        {
+            caller.Reply("Bots: " + MultiplayerOptions.OptionType.NumberOfBotsTeam1.GetIntValue() + " (team 1) vs "
+                + MultiplayerOptions.OptionType.NumberOfBotsTeam2.GetIntValue() + " (team 2); in the game now: "
+                + MissionFlow.CountBots(TaleWorlds.Core.BattleSideEnum.Attacker) + " vs " + MissionFlow.CountBots(TaleWorlds.Core.BattleSideEnum.Defender) + ".");
+            return;
+        }
+        if (args.Length != 2 || !int.TryParse(args[0], out int team1) || !int.TryParse(args[1], out int team2) || team1 < 0 || team2 < 0 || team1 > 255 || team2 > 255)
+        {
+            caller.Reply("Usage: !bots <team1> <team2>, 0 to 255 each.");
+            return;
+        }
+        MissionFlow.SetBots(team1, team2);
+        caller.Announce("Bots: " + team1 + " vs " + team2 + ".");
     }
 
     private static void ResetMap(Caller caller, string[] args)
