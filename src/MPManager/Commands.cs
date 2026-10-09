@@ -30,7 +30,7 @@ internal static class Commands
         new Command("maps", "", "Numbered list of the maps for the current mode.", admin: false, ListMaps),
         new Command("specs", "", "List the spectators.", admin: false, Specs),
         new Command("ready", "", "Skirmish/Battle warmup: your team is ready. When both teams are ready within 60 s, warmup ends (30 s).", admin: false, Ready),
-        new Command("notready", "", "Take back your team's !ready.", admin: false, NotReady),
+        new Command("notready", "", "Take back your team's !ready, or cancel the countdown it started.", admin: false, NotReady),
         new Command("setmap", "<map> [team1 team2]", "Switch to a map (and cultures) and restart. Partial or misspelled names, numbers from !maps, and current (c) for the same map work.", admin: true, SetMap),
         new Command("resetmap", "", "Restart the mission with the same map and cultures.", admin: true, ResetMap),
         new Command("warmup", "", "Back to warmup: cancels an ending warmup, or restarts the mission if the match has started.", admin: true, Warmup),

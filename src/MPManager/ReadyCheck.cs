@@ -7,7 +7,8 @@ namespace MPManager;
 
 // !ready / !notready: when a player of each team is ready within ReadyWindowSeconds of each other, warmup ends
 // with the game's 30 s countdown. Skirmish and Battle only, during warmup. A ready expires after the window
-// (announced), and every mission starts with nobody ready.
+// (announced), and every mission starts with nobody ready. During a countdown started by !ready, !notready from
+// either team cancels it and puts warmup back (like !warmup); a countdown started by !endwarmup is left alone.
 internal static class ReadyCheck
 {
     private const double ReadyWindowSeconds = 60;
@@ -16,6 +17,7 @@ internal static class ReadyCheck
 
     private static readonly Dictionary<BattleSideEnum, (string Player, DateTime At)> Ready = new Dictionary<BattleSideEnum, (string, DateTime)>();
     private static Mission _mission;
+    private static Mission _countdownStartedByReady;
 
     public static void Tick()
     {
@@ -46,11 +48,6 @@ internal static class ReadyCheck
         {
             return "!ready is for Skirmish and Battle.";
         }
-        MissionFlow.WarmupStatus warmup = MissionFlow.Warmup();
-        if (warmup != MissionFlow.WarmupStatus.Infinite)
-        {
-            return warmup == MissionFlow.WarmupStatus.Ending ? "Warmup is already ending." : "Not in warmup.";
-        }
         Team team = peer.GetComponent<MissionPeer>()?.Team;
         if (team == null || (team.Side != BattleSideEnum.Attacker && team.Side != BattleSideEnum.Defender))
         {
@@ -58,6 +55,27 @@ internal static class ReadyCheck
         }
         BattleSideEnum side = team.Side;
         BattleSideEnum other = side == BattleSideEnum.Attacker ? BattleSideEnum.Defender : BattleSideEnum.Attacker;
+
+        MissionFlow.WarmupStatus warmup = MissionFlow.Warmup();
+        if (warmup == MissionFlow.WarmupStatus.Ending)
+        {
+            if (ready)
+            {
+                return "Warmup is already ending.";
+            }
+            if (_countdownStartedByReady != Mission.Current)
+            {
+                return "Warmup was ended by an admin; only !warmup can bring it back.";
+            }
+            _countdownStartedByReady = null;
+            MissionFlow.StartHeldWarmup();
+            ServerChat.Broadcast(peer.UserName + ": " + SideName(side) + " are not ready after all. Back to warmup; !ready again when set.");
+            return null;
+        }
+        if (warmup != MissionFlow.WarmupStatus.Infinite)
+        {
+            return "Not in warmup.";
+        }
 
         if (!ready)
         {
@@ -73,7 +91,9 @@ internal static class ReadyCheck
         if (Ready.ContainsKey(other))
         {
             Ready.Clear();
-            ServerChat.Broadcast(peer.UserName + ": " + SideName(side) + " are ready too. " + MissionFlow.EndWarmup(force: false, out _));
+            _countdownStartedByReady = Mission.Current;
+            ServerChat.Broadcast(peer.UserName + ": " + SideName(side) + " are ready too. " + MissionFlow.EndWarmup(force: false, out _)
+                + " Changed your mind? !notready cancels the countdown.");
             return null;
         }
         ServerChat.Broadcast(peer.UserName + ": " + SideName(side) + " are ready. " + SideName(other) + ": type !ready within " + ReadyWindowSeconds + " s to start.");

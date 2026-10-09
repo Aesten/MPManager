@@ -22,7 +22,7 @@ announced to everyone.
 | `!kick <player> [--confirm]` | Kicks the closest-named player after `!confirm` (within 30 s), or at once with `--confirm`. |
 | `!confirm` | Confirms a pending `!kick`. |
 | `!ready` (`!r`) | Skirmish/Battle warmup: your team is ready. When a player of the other team readies within 60 s, warmup ends with the 30 s countdown. A ready expires after 60 s. |
-| `!notready` (`!nr`) | Takes back your team's ready. |
+| `!notready` (`!nr`) | Takes back your team's ready. During a countdown started by `!ready`, cancels it and goes back to warmup (players on either team can). |
 | `!specs` | Lists the spectators. |
 | `!maps` | Numbered list of the maps for the current mode. |
 | `!help` | Lists the commands and aliases. |
