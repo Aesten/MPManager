@@ -22,9 +22,11 @@ internal sealed class Choice
 }
 
 // Resolves what someone typed in chat (no autocomplete there) to one of a list of choices:
-// 1. a number: the choice at that position in the list (as printed by !maps and !factions);
+// 1. a number: the choice at that position in the list (as printed by !maps); not with a leading zero or past the
+//    end of the list, so "004" or "013" match map names instead;
 // 2. the exact id or name, ignoring case, spaces and punctuation;
-// 3. the only choice whose id or name contains what was typed ("2f" for mp_skirmish_map_002f, "emp" for empire);
+// 3. the only choice whose id or name contains what was typed ("2f" for mp_skirmish_map_002f, "emp" for empire),
+//    or of several, the only one whose id ends with it ("008": mp_skirmish_map_008, not mp_skirmish_map_008_skin);
 // 4. the closest spelling, if it's clearly the best and close enough: what was typed is compared with the
 //    best-matching part of each id and name, so "lighthose" finds mp_bnl_lighthouse (one letter off) despite
 //    the prefix. One mistake is allowed per 4 letters typed; 3 letters or fewer must match exactly (step 3).
@@ -38,14 +40,9 @@ internal static class Matcher
             error = "Nothing to choose from.";
             return null;
         }
-        if (int.TryParse(input, out int number))
+        if (int.TryParse(input, out int number) && !input.StartsWith("0") && number >= 1 && number <= choices.Count)
         {
-            if (number >= 1 && number <= choices.Count)
-            {
-                return choices[number - 1];
-            }
-            error = "Pick a number from 1 to " + choices.Count + ".";
-            return null;
+            return choices[number - 1];
         }
 
         string key = Normalize(input);
@@ -64,6 +61,11 @@ internal static class Matcher
         if (containing.Count == 1)
         {
             return containing[0];
+        }
+        List<Choice> ending = containing.Where(c => Normalize(c.Id).EndsWith(key)).ToList();
+        if (containing.Count > 1 && ending.Count == 1)
+        {
+            return ending[0];
         }
         if (containing.Count > 1)
         {

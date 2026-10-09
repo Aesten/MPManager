@@ -271,8 +271,22 @@ internal static class MissionFlow
 
     public static string Next(MultiplayerOptions.OptionType option) => option.GetStrValue(MultiplayerOptions.MultiplayerOptionsAccessMode.NextMapOptions);
 
-    // Maps for a game type, in a stable order: the game type's official maps, then maps added with
-    // add_map_to_usable_maps / add_map_to_automated_battle_pool, then custom scenes in Modules/Multiplayer/SceneObj.
+    // Official scenes in Modules/Native/SceneObj offered per game type, by name prefix. The game's own lists
+    // (Native/ModuleData/Multiplayer/MultiplayerScenes.xml) leave out scenes that still ship with the game and
+    // every client: winter versions, mp_skirmish_map_004 to 006, 008, 013, the Battania maps...
+    private static readonly Dictionary<string, string[]> OfficialScenePrefixes = new Dictionary<string, string[]>
+    {
+        ["Skirmish"] = new[] { "mp_skirmish_" },
+        ["Battle"] = new[] { "mp_battle_", "mp_skirmish_" },
+        ["Captain"] = new[] { "mp_sergeant_" },
+        ["Siege"] = new[] { "mp_siege_" },
+        ["TeamDeathmatch"] = new[] { "mp_tdm_" },
+        ["Duel"] = new[] { "mp_duel_" },
+    };
+
+    // Maps for a game type, in a stable order: the game type's official list, maps added with add_map_to_usable_maps
+    // / add_map_to_automated_battle_pool, the other official scenes for the game type, then custom scenes in
+    // Modules/Multiplayer/SceneObj. Test scenes (mp_skirmish_spawn_test) are left out.
     public static List<Choice> Maps(string gameType)
     {
         List<string> ids = new List<string>();
@@ -293,22 +307,39 @@ internal static class MissionFlow
         Add(MultiplayerGameTypes.GetGameTypeInfo(gameType)?.Scenes);
         Add(MultiplayerIntermissionVotingManager.Instance.GetUsableMaps(gameType));
         Add(ServerSideIntermissionManager.Instance?.AutomatedMapPool);
+        if (OfficialScenePrefixes.TryGetValue(gameType, out string[] prefixes))
+        {
+            Add(ModuleScenes("Native").Where(id => prefixes.Any(p => id.StartsWith(p, StringComparison.OrdinalIgnoreCase))).OrderBy(id => id));
+        }
+        Add(ModuleScenes("Multiplayer"));
+        return ids.Where(id => !id.EndsWith("_test", StringComparison.OrdinalIgnoreCase)).Select(id => new Choice(id, MapName(id))).ToList();
+    }
+
+    private static string[] ModuleScenes(string module)
+    {
         try
         {
-            Add(Utilities.GetSingleModuleScenesOfModule("Multiplayer"));
+            return Utilities.GetSingleModuleScenesOfModule(module) ?? Array.Empty<string>();
         }
         catch (Exception)
         {
-            // custom scenes are optional
+            return Array.Empty<string>();
         }
-        return ids.Select(id => new Choice(id, MapName(id))).ToList();
     }
 
+    // The game's display name, if it has one. Winter versions share their map's name; they get " Winter" added.
     public static string MapName(string id)
     {
         try
         {
-            return GameTexts.TryGetText("str_multiplayer_scene_name", out var text, id) ? text.ToString() : id;
+            if (!GameTexts.TryGetText("str_multiplayer_scene_name", out var text, id))
+            {
+                return id;
+            }
+            string name = text.ToString();
+            return id.EndsWith("_winter", StringComparison.OrdinalIgnoreCase) && name.IndexOf("winter", StringComparison.OrdinalIgnoreCase) < 0
+                ? name + " Winter"
+                : name;
         }
         catch (Exception)
         {
