@@ -113,7 +113,7 @@ helper sends them to players who don't have them. The server only sees new maps 
 ./run-server.sh --vanilla        # without MPBalancer, for A/B comparisons
 ./run-server.sh --no-manager     # without MPManager
 ./run-server.sh --config x.txt   # config file in Modules/Native (default: config.txt)
-./run-server.sh --tickrate 60    # server tick rate in Hz (default: 240)
+./run-server.sh --tickrate 60    # server tick rate in Hz (default: 140)
 ./run-server.sh --stop           # stop the server and wait for it to exit
 ```
 

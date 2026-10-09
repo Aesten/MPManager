@@ -10,7 +10,7 @@
 #   --vanilla        start without MPBalancer, for A/B comparisons
 #   --no-manager     start without MPManager
 #   --config <file>  server config, relative to Modules/Native (default: config.txt)
-#   --tickrate <n>   server tick rate in Hz (default: 240)
+#   --tickrate <n>   server tick rate in Hz (default: 140)
 #   --stop           stop a running server and wait for it to exit
 #
 # Server output is also written to server.log next to this script; logs of earlier runs are
@@ -31,7 +31,7 @@ LOG_ARCHIVE="$SCRIPT_DIR/logs"
 COMMAND_FIFO="$SCRIPT_DIR/console.fifo"
 SESSION="bannerlord"
 PORT=7210
-TICKRATE=240
+TICKRATE=140
 
 VANILLA=0
 MANAGER=1
