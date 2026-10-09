@@ -25,7 +25,7 @@ answers privately, and changes are announced to everyone. Admin commands need th
 | `!notready` | `!nr` | everyone | Takes back your team's ready. During a countdown started by `!ready`, cancels it and goes back to warmup (players on either team can). |
 | `!specs` | | everyone | Lists the spectators. |
 | `!maps` | | everyone | Numbered list of the maps for the current mode. |
-| `!help` | | everyone | Lists the commands and aliases. |
+| `!help [command]` | | everyone | Lists the commands, one per line with their aliases; `!help <command>` shows its usage and description. |
 
 Other mods' commands (MPBalancer's `!b`) are hidden from chat the same way and still reach their mod.
 

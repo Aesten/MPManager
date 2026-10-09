@@ -26,7 +26,7 @@ internal static class Commands
 
     private static readonly List<Command> All = new List<Command>
     {
-        new Command("help", "", "List the commands and aliases.", admin: false, Help),
+        new Command("help", "[command]", "List the commands with their aliases, or show one command's usage.", admin: false, Help),
         new Command("maps", "", "Numbered list of the maps for the current mode.", admin: false, ListMaps),
         new Command("specs", "", "List the spectators.", admin: false, Specs),
         new Command("ready", "", "Skirmish/Battle warmup: your team is ready. When both teams are ready within 60 s, warmup ends (30 s).", admin: false, Ready),
@@ -146,17 +146,49 @@ internal static class Commands
         MPManagerSubModule.Log("Loaded " + Aliases.Count + " command alias(es) from " + path + ".");
     }
 
+    // !help: one short line per command the caller can use, with its aliases ("!endwarmup  (!ew, !ewf = --force)").
+    // !help <command or alias>: that command's usage and description.
     private static void Help(Caller caller, string[] args)
     {
-        foreach (Command c in All.Where(c => caller.IsAdmin || !c.Admin))
-        {
-            caller.Reply("!" + c.Name + (c.Usage.Length > 0 ? " " + c.Usage : "") + ": " + c.Description);
-        }
         LoadAliases();
-        if (Aliases.Count > 0)
+        List<Command> available = All.Where(c => caller.IsAdmin || !c.Admin).ToList();
+        if (args.Length > 0)
         {
-            caller.Reply("Aliases: " + string.Join(", ", Aliases.OrderBy(a => a.Key).Select(a => "!" + a.Key + " = !" + a.Value)));
+            string name = args[0].TrimStart('!', '/').ToLowerInvariant();
+            if (Aliases.TryGetValue(name, out string expansion))
+            {
+                name = expansion.Split(' ')[0].ToLowerInvariant();
+            }
+            Command command = available.FirstOrDefault(c => c.Name == name);
+            if (command == null)
+            {
+                caller.Reply("No command !" + args[0].TrimStart('!', '/') + ". !help lists them.");
+                return;
+            }
+            caller.Reply("!" + command.Name + (command.Usage.Length > 0 ? " " + command.Usage : "") + AliasText(command));
+            caller.Reply(command.Description);
+            return;
         }
+        foreach (Command command in available)
+        {
+            caller.Reply("!" + command.Name + AliasText(command));
+        }
+        caller.Reply("!help <command> for details.");
+    }
+
+    // "  (!ew, !ewf = --force)", or "" without aliases.
+    private static string AliasText(Command command)
+    {
+        List<string> aliases = Aliases
+            .Where(a => a.Value.Split(' ')[0].Equals(command.Name, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(a => a.Value.Length).ThenBy(a => a.Key)
+            .Select(a =>
+            {
+                string extra = a.Value.Substring(a.Value.Split(' ')[0].Length).Trim();
+                return "!" + a.Key + (extra.Length > 0 ? " = " + extra : "");
+            })
+            .ToList();
+        return aliases.Count == 0 ? "" : "  (" + string.Join(", ", aliases) + ")";
     }
 
     private static void ListMaps(Caller caller, string[] args)
