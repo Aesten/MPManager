@@ -8,3 +8,5 @@ rm = resetmap
 wu = warmup
 ew = endwarmup
 ewf = endwarmup --force
+r = ready
+nr = notready

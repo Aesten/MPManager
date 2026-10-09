@@ -3,7 +3,6 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using NetworkMessages.FromServer;
 using TaleWorlds.MountAndBlade;
 using TaleWorlds.MountAndBlade.Diamond;
 
@@ -30,7 +29,9 @@ internal static class Commands
         new Command("help", "", "List the commands and aliases.", admin: false, Help),
         new Command("maps", "", "Numbered list of the maps for the current mode.", admin: false, ListMaps),
         new Command("specs", "", "List the spectators.", admin: false, Specs),
-        new Command("setmap", "<map> [team1 team2]", "Switch to a map (and cultures) and restart. Partial or misspelled names, and numbers from !maps, work.", admin: true, SetMap),
+        new Command("ready", "", "Skirmish/Battle warmup: your team is ready. When both teams are ready within 60 s, warmup ends (30 s).", admin: false, Ready),
+        new Command("notready", "", "Take back your team's !ready.", admin: false, NotReady),
+        new Command("setmap", "<map> [team1 team2]", "Switch to a map (and cultures) and restart. Partial or misspelled names, numbers from !maps, and current (c) for the same map work.", admin: true, SetMap),
         new Command("resetmap", "", "Restart the mission with the same map and cultures.", admin: true, ResetMap),
         new Command("warmup", "", "Back to warmup: cancels an ending warmup, or restarts the mission if the match has started.", admin: true, Warmup),
         new Command("endwarmup", "[--force]", "End this mission's warmup (infinite until then): 30 s countdown, or 3 s with --force.", admin: true, EndWarmup),
@@ -189,7 +190,17 @@ internal static class Commands
             caller.Reply("Usage: !setmap <map> [team1 team2]   (map names without spaces; !maps lists them)");
             return;
         }
-        Choice map = Matcher.Resolve(args[0], MissionFlow.Maps(MissionFlow.GameType), out string error);
+        string error = null;
+        Choice map;
+        if (args[0].Equals("current", StringComparison.OrdinalIgnoreCase) || args[0].Equals("c", StringComparison.OrdinalIgnoreCase))
+        {
+            string current = MultiplayerOptions.OptionType.Map.GetStrValue();
+            map = new Choice(current, MissionFlow.MapName(current));
+        }
+        else
+        {
+            map = Matcher.Resolve(args[0], MissionFlow.Maps(MissionFlow.GameType), out error);
+        }
         if (map == null)
         {
             caller.Reply(error);
@@ -209,6 +220,24 @@ internal static class Commands
         }
         MissionFlow.Change(map.Id, team1?.Id, team2?.Id);
         caller.Announce("Switching to " + map.Name + (team1 != null ? ", " + team1.Name + " vs " + team2.Name : "") + ".");
+    }
+
+    private static void Ready(Caller caller, string[] args)
+    {
+        string reply = ReadyCheck.SetReady(caller.Peer, ready: true);
+        if (reply != null)
+        {
+            caller.Reply(reply);
+        }
+    }
+
+    private static void NotReady(Caller caller, string[] args)
+    {
+        string reply = ReadyCheck.SetReady(caller.Peer, ready: false);
+        if (reply != null)
+        {
+            caller.Reply(reply);
+        }
     }
 
     private static void ResetMap(Caller caller, string[] args)
@@ -341,30 +370,14 @@ internal static class Commands
             }
             else
             {
-                Send(Peer, text);
+                ServerChat.Send(Peer, text);
             }
         }
 
         // Changes are shown to everyone, so all players know why the mission restarts.
         public void Announce(string text)
         {
-            string line = Name + ": " + text;
-            MPManagerSubModule.Log(line);
-            foreach (NetworkCommunicator peer in GameNetwork.NetworkPeers)
-            {
-                Send(peer, line);
-            }
-        }
-
-        private static void Send(NetworkCommunicator peer, string text)
-        {
-            if (peer.IsServerPeer || !peer.IsSynchronized)
-            {
-                return;
-            }
-            GameNetwork.BeginModuleEventAsServer(peer);
-            GameNetwork.WriteMessage(new ServerMessage(text));
-            GameNetwork.EndModuleEventAsServer();
+            ServerChat.Broadcast(Name + ": " + text);
         }
     }
 }

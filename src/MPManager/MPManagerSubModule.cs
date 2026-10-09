@@ -31,6 +31,7 @@ public class MPManagerSubModule : MBSubModuleBase
             ChatInterceptor.Tick();
             Commands.Tick();
             MissionFlow.Tick();
+            ReadyCheck.Tick();
         }
         catch (Exception e)
         {

@@ -201,6 +201,24 @@ internal static class MissionFlow
         return ended ? "Warmup ends in 30 s." : "Warmup is already ending.";
     }
 
+    public enum WarmupStatus
+    {
+        None,     // not in warmup
+        Infinite, // waiting for !endwarmup or !ready
+        Ending    // counting down to the match
+    }
+
+    public static WarmupStatus Warmup()
+    {
+        MultiplayerWarmupComponent.WarmupStates? state = CurrentWarmupState();
+        if (state == null || state == MultiplayerWarmupComponent.WarmupStates.Ended
+            || Mission.Current.GetMissionBehavior<MissionLobbyComponent>()?.CurrentMultiplayerState == MissionLobbyComponent.MultiplayerGameState.Ending)
+        {
+            return WarmupStatus.None;
+        }
+        return state == MultiplayerWarmupComponent.WarmupStates.Ending || Mission.Current == _warmupEnded ? WarmupStatus.Ending : WarmupStatus.Infinite;
+    }
+
     private static MultiplayerWarmupComponent.WarmupStates? CurrentWarmupState()
     {
         MultiplayerWarmupComponent warmup = Mission.Current?.GetMissionBehavior<MultiplayerWarmupComponent>();

@@ -15,17 +15,19 @@ announced to everyone.
 
 | Command | Effect |
 |---|---|
-| `!setmap <map> [team1 team2]` | Switches the map (and optionally the cultures) and restarts the mission. |
+| `!setmap <map> [team1 team2]` | Switches the map (and optionally the cultures) and restarts the mission. `current` or `c` keeps the map: `!setmap c vla stur`. |
 | `!resetmap` | Restarts the mission with the same map and cultures. |
 | `!warmup` | Back to warmup: cancels an ending warmup, or restarts the mission if the match has started. |
 | `!endwarmup [--force]` | Ends this mission's warmup with the game's 30 s countdown, or with `--force` the 3 s "battle starting" one. |
 | `!kick <player> [--confirm]` | Kicks the closest-named player after `!confirm` (within 30 s), or at once with `--confirm`. |
 | `!confirm` | Confirms a pending `!kick`. |
+| `!ready` (`!r`) | Skirmish/Battle warmup: your team is ready. When a player of the other team readies within 60 s, warmup ends with the 30 s countdown. A ready expires after 60 s. |
+| `!notready` (`!nr`) | Takes back your team's ready. |
 | `!specs` | Lists the spectators. |
 | `!maps` | Numbered list of the maps for the current mode. |
 | `!help` | Lists the commands and aliases. |
 
-`!specs`, `!maps` and `!help` work for everyone. Other mods' commands (MPBalancer's `!b`) are hidden from
+`!ready`, `!notready`, `!specs`, `!maps` and `!help` work for everyone. Other mods' commands (MPBalancer's `!b`) are hidden from
 chat the same way and still reach their mod.
 
 **Matching names.** Maps, cultures and players are typed without spaces and matched loosely: by number
