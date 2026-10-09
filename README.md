@@ -30,20 +30,23 @@ answers privately, and changes are announced to everyone. Admin commands need th
 Other mods' commands (MPBalancer's `!b`) are hidden from chat the same way and still reach their mod.
 
 **Matching names.** Maps, cultures and players are typed without spaces and matched loosely: by number
-(from `!maps`; not with a leading zero, so `004` is a map name), by id or display name, by any unique part
+(from `!maps`; not with a leading zero, so `004` is a map name), by id or name, by any unique part
 (`lighthouse`, `vla`, `emp`), by the end of an id when several contain it (`008` is `mp_skirmish_map_008`,
-not `..._008_skin`), or misspelled (`lighthose`, `vatenborg`, `osracinsurection`). One mistake is allowed per
-four letters, compared with the closest part of the name. When it's ambiguous (`fort`), the candidates are
-listed instead. Official maps have display names (`Osrac Insurrection`; winter versions get "Winter" added:
-`xaunawinter`); other maps only have their scene folder name.
+not `..._008_skin`), or misspelled (`lighthose`, `vatenborg`). One mistake is allowed per four letters,
+compared with the closest part of the name. When it's ambiguous (`fort`), the candidates are listed instead.
+
+**Map names** are defined in `scripts/server/maps.txt` (deployed to `~/bannerlord/maps.txt` and re-read when
+it changes, no restart): `lighthouse = mp_bnl_lighthouse` names a map, a map can have several names, and
+`!maps` shows the first one. Maps without a name are shown and matched by their id. The game's own display
+names aren't used.
 
 `!maps` lists, for the current mode: the game's own map list (`Native/ModuleData/Multiplayer/MultiplayerScenes.xml`),
 maps added with `add_map_to_usable_maps` / `add_map_to_automated_battle_pool`, the other official scenes that
 ship with the game (`Native/SceneObj`, by prefix: `mp_skirmish_` for Skirmish, `mp_battle_` and `mp_skirmish_`
-for Battle, `mp_sergeant_`, `mp_siege_`, `mp_tdm_`, `mp_duel_`), and every custom map in the server's
-`Modules/Multiplayer/SceneObj`. Test scenes (`mp_skirmish_spawn_test`) are left out. Scenes the game leaves
-out of its lists (winter versions, `mp_skirmish_map_004` to `006`, `008`, `013`, the Battania maps) load like
-any other but may never have been finished.
+for Battle, `mp_sergeant_`, `mp_siege_`, `mp_tdm_`, `mp_duel_`), every custom map in the server's
+`Modules/Multiplayer/SceneObj`, and every map named in `maps.txt`. Test scenes (`mp_skirmish_spawn_test`)
+are left out. Scenes the game leaves out of its lists (winter versions, `mp_skirmish_map_004` to `006`,
+`008`, `013`, the Battania maps) load like any other but may never have been finished.
 
 **Aliases** are defined in `scripts/server/aliases.txt` (deployed to `~/bannerlord/aliases.txt` and re-read
 when it changes, no restart): `sm = setmap` makes `!sm lighthouse` run `!setmap lighthouse`, and an alias
@@ -105,7 +108,7 @@ prints to your terminal unless you ask for it.
 Same server as mpbalancer (`ssh aesten@7900x`; set `MPM_HOST` to deploy elsewhere):
 
 ```sh
-scripts/deploy.sh                # build and install the module and scripts/server/ (run-server.sh, mpm, aliases.txt)
+scripts/deploy.sh                # build and install the module and scripts/server/ (run-server.sh, mpm, aliases.txt, maps.txt)
 scripts/deploy.sh --restart      # ...then restart the server
 scripts/deploy-maps.sh [dirs]    # install custom maps (default: every map this PC's game has downloaded)
 ```

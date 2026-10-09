@@ -5,18 +5,28 @@ using System.Text;
 
 namespace MPManager;
 
-// One thing a command argument can name: a map, a culture. Id is what the game uses; Name is the display name.
+// One thing a command argument can name: a map, a culture, a player. Id is what the game uses; Names are what
+// people call it (the first one is how it's shown). Matching looks at the id and every name.
 internal sealed class Choice
 {
-    public Choice(string id, string name)
+    public Choice(string id, params string[] names)
+        : this(id, (IReadOnlyList<string>)names)
+    {
+    }
+
+    public Choice(string id, IReadOnlyList<string> names)
     {
         Id = id;
-        Name = string.IsNullOrEmpty(name) ? id : name;
+        Names = names.Where(n => !string.IsNullOrEmpty(n)).ToList();
     }
 
     public string Id { get; }
 
-    public string Name { get; }
+    public IReadOnlyList<string> Names { get; }
+
+    public string Name => Names.Count > 0 ? Names[0] : Id;
+
+    internal IEnumerable<string> Keys => Names.Prepend(Id);
 
     public override string ToString() => string.Equals(Name, Id, StringComparison.OrdinalIgnoreCase) ? Name : Name + " (" + Id + ")";
 }
@@ -51,13 +61,13 @@ internal static class Matcher
             error = "Nothing typed.";
             return null;
         }
-        Choice exact = choices.FirstOrDefault(c => Normalize(c.Id) == key || Normalize(c.Name) == key);
+        Choice exact = choices.FirstOrDefault(c => c.Keys.Any(k => Normalize(k) == key));
         if (exact != null)
         {
             return exact;
         }
 
-        List<Choice> containing = choices.Where(c => Normalize(c.Id).Contains(key) || Normalize(c.Name).Contains(key)).ToList();
+        List<Choice> containing = choices.Where(c => c.Keys.Any(k => Normalize(k).Contains(key))).ToList();
         if (containing.Count == 1)
         {
             return containing[0];
@@ -74,7 +84,7 @@ internal static class Matcher
         }
 
         var ranked = choices
-            .Select(c => (Choice: c, Distance: Math.Min(PartDistance(key, Normalize(c.Id)), PartDistance(key, Normalize(c.Name)))))
+            .Select(c => (Choice: c, Distance: c.Keys.Min(k => PartDistance(key, Normalize(k)))))
             .OrderBy(r => r.Distance)
             .ToList();
         int tolerance = key.Length / 4;

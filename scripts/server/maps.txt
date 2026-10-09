@@ -1,0 +1,6 @@
+# MPManager map names: <name> = <map id>
+# "lighthouse = mp_bnl_lighthouse" makes !setmap lighthouse (and close misspellings) pick mp_bnl_lighthouse,
+# and !maps shows it as "lighthouse (mp_bnl_lighthouse)". A map can have several names; the first is shown.
+# Maps without a name are shown and matched by their id. A map named here is offered in every mode.
+# Edit here and run scripts/deploy.sh; the server picks up changes without a restart
+# (it re-reads ~/bannerlord/maps.txt when it changes).

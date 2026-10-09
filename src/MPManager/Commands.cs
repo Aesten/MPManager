@@ -194,7 +194,7 @@ internal static class Commands
     private static void ListMaps(Caller caller, string[] args)
     {
         List<Choice> maps = MissionFlow.Maps(MissionFlow.GameType);
-        caller.Reply(MissionFlow.GameType + " maps (now: " + MissionFlow.MapName(MultiplayerOptions.OptionType.Map.GetStrValue()) + "):");
+        caller.Reply(MissionFlow.GameType + " maps (now: " + MapNames.Display(MultiplayerOptions.OptionType.Map.GetStrValue()) + "):");
         for (int i = 0; i < maps.Count; i++)
         {
             caller.Reply((i + 1) + ". " + maps[i]);
@@ -227,7 +227,7 @@ internal static class Commands
         if (args[0].Equals("current", StringComparison.OrdinalIgnoreCase) || args[0].Equals("c", StringComparison.OrdinalIgnoreCase))
         {
             string current = MultiplayerOptions.OptionType.Map.GetStrValue();
-            map = new Choice(current, MissionFlow.MapName(current));
+            map = new Choice(current, MapNames.For(current));
         }
         else
         {

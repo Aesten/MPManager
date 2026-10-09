@@ -286,7 +286,8 @@ internal static class MissionFlow
 
     // Maps for a game type, in a stable order: the game type's official list, maps added with add_map_to_usable_maps
     // / add_map_to_automated_battle_pool, the other official scenes for the game type, then custom scenes in
-    // Modules/Multiplayer/SceneObj. Test scenes (mp_skirmish_spawn_test) are left out.
+    // Modules/Multiplayer/SceneObj, then maps named in maps.txt (MapNames). Test scenes (mp_skirmish_spawn_test)
+    // are left out.
     public static List<Choice> Maps(string gameType)
     {
         List<string> ids = new List<string>();
@@ -312,7 +313,8 @@ internal static class MissionFlow
             Add(ModuleScenes("Native").Where(id => prefixes.Any(p => id.StartsWith(p, StringComparison.OrdinalIgnoreCase))).OrderBy(id => id));
         }
         Add(ModuleScenes("Multiplayer"));
-        return ids.Where(id => !id.EndsWith("_test", StringComparison.OrdinalIgnoreCase)).Select(id => new Choice(id, MapName(id))).ToList();
+        Add(MapNames.Ids());
+        return ids.Where(id => !id.EndsWith("_test", StringComparison.OrdinalIgnoreCase)).Select(id => new Choice(id, MapNames.For(id))).ToList();
     }
 
     private static string[] ModuleScenes(string module)
@@ -324,26 +326,6 @@ internal static class MissionFlow
         catch (Exception)
         {
             return Array.Empty<string>();
-        }
-    }
-
-    // The game's display name, if it has one. Winter versions share their map's name; they get " Winter" added.
-    public static string MapName(string id)
-    {
-        try
-        {
-            if (!GameTexts.TryGetText("str_multiplayer_scene_name", out var text, id))
-            {
-                return id;
-            }
-            string name = text.ToString();
-            return id.EndsWith("_winter", StringComparison.OrdinalIgnoreCase) && name.IndexOf("winter", StringComparison.OrdinalIgnoreCase) < 0
-                ? name + " Winter"
-                : name;
-        }
-        catch (Exception)
-        {
-            return id;
         }
     }
 

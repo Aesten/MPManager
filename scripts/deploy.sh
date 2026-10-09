@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Builds MPManager and installs it on the test server, along with everything in scripts/server/ (run-server.sh,
-# mpm, aliases.txt) in ~/bannerlord/. mpm is linked as ~/.local/bin/mpm, so it's on the PATH there.
+# mpm, aliases.txt, maps.txt) in ~/bannerlord/. mpm is linked as ~/.local/bin/mpm, so it's on the PATH there.
 # Custom maps are installed separately, by scripts/deploy-maps.sh.
 #
 # Usage: scripts/deploy.sh [--no-build] [--restart [-- <run-server.sh options>]]
