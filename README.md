@@ -9,26 +9,25 @@ at runtime) is in `../BannerlordDecompiled/notes/dedicated-server-runtime.md`.
 
 ## What it does
 
-**Chat commands for admins** (players who joined with the server's admin password). Messages starting
-with `!` or `/` are never shown in chat; the server handles them and answers privately, and changes are
-announced to everyone.
+**Chat commands.** Messages starting with `!` or `/` are never shown in chat; the server handles them and
+answers privately, and changes are announced to everyone. Admin commands need the server's admin password
+(join with it); the command pipe (`mpm cmd`) counts as an admin.
 
-| Command | Effect |
-|---|---|
-| `!setmap <map> [team1 team2]` | Switches the map (and optionally the cultures) and restarts the mission. `current` or `c` keeps the map: `!setmap c vla stur`. |
-| `!resetmap` | Restarts the mission with the same map and cultures. |
-| `!warmup` | Back to warmup: cancels an ending warmup, or restarts the mission if the match has started. |
-| `!endwarmup [--force]` | Ends this mission's warmup with the game's 30 s countdown, or with `--force` the 3 s "battle starting" one. |
-| `!kick <player> [--confirm]` | Kicks the closest-named player after `!confirm` (within 30 s), or at once with `--confirm`. |
-| `!confirm` | Confirms a pending `!kick`. |
-| `!ready` (`!r`) | Skirmish/Battle warmup: your team is ready. When a player of the other team readies within 60 s, warmup ends with the 30 s countdown. A ready expires after 60 s. |
-| `!notready` (`!nr`) | Takes back your team's ready. During a countdown started by `!ready`, cancels it and goes back to warmup (players on either team can). |
-| `!specs` | Lists the spectators. |
-| `!maps` | Numbered list of the maps for the current mode. |
-| `!help` | Lists the commands and aliases. |
+| Command | Aliases | Who | Effect |
+|---|---|---|---|
+| `!setmap <map> [team1 team2]` | `!sm` | admin | Switches the map (and optionally the cultures) and restarts the mission. `current` or `c` keeps the map: `!setmap c vla stur`. |
+| `!resetmap` | `!rm` | admin | Restarts the mission with the same map and cultures. |
+| `!warmup` | `!wu` | admin | Back to warmup: cancels an ending warmup, or restarts the mission if the match has started. |
+| `!endwarmup [--force]` | `!ew`, `!ewf` (= `--force`) | admin | Ends this mission's warmup with the game's 30 s countdown, or with `--force` the 3 s "battle starting" one. |
+| `!kick <player> [--confirm]` | | admin | Kicks the closest-named player after `!confirm` (within 30 s), or at once with `--confirm`. |
+| `!confirm` | | admin | Confirms a pending `!kick`. |
+| `!ready` | `!r` | everyone | Skirmish/Battle warmup: your team is ready. When a player of the other team readies within 60 s, warmup ends with the 30 s countdown. A ready expires after 60 s. |
+| `!notready` | `!nr` | everyone | Takes back your team's ready. During a countdown started by `!ready`, cancels it and goes back to warmup (players on either team can). |
+| `!specs` | | everyone | Lists the spectators. |
+| `!maps` | | everyone | Numbered list of the maps for the current mode. |
+| `!help` | | everyone | Lists the commands and aliases. |
 
-`!ready`, `!notready`, `!specs`, `!maps` and `!help` work for everyone. Other mods' commands (MPBalancer's `!b`) are hidden from
-chat the same way and still reach their mod.
+Other mods' commands (MPBalancer's `!b`) are hidden from chat the same way and still reach their mod.
 
 **Matching names.** Maps, cultures and players are typed without spaces and matched loosely: by number
 (from `!maps`), by id or display name, by any unique part (`lighthouse`, `vla`, `emp`), or misspelled
@@ -40,7 +39,8 @@ folder name. `!maps` lists the mode's official maps, maps added with `add_map_to
 
 **Aliases** are defined in `scripts/server/aliases.txt` (deployed to `~/bannerlord/aliases.txt` and re-read
 when it changes, no restart): `sm = setmap` makes `!sm lighthouse` run `!setmap lighthouse`, and an alias
-can carry arguments (`ewf = endwarmup --force`).
+can carry arguments (`ewf = endwarmup --force`). The Aliases column above lists the defaults from that file;
+update it when the file changes.
 
 **Infinite warmup.** Every mission starts in a warmup that lasts until `!endwarmup`, with its timer
 frozen: twice a second the server resends the warmup start time, slightly ahead, so clients keep showing
