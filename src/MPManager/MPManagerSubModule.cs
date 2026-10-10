@@ -54,7 +54,6 @@ public class MPManagerSubModule : MBSubModuleBase
             MissionFlow.Tick();
             ReadyCheck.Tick();
             Standby.Tick();
-            Horses.Tick();
         }
         catch (Exception e)
         {

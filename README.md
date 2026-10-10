@@ -105,10 +105,6 @@ The base config on the server (`~/bannerlord/configs/base-config.txt`, not in th
 restart) only sets the server name, the passwords, the player cap (20, for
 every mode), `DisableInactivityKick True`, the default mode's game type and map, and `start_game`. MPManager doesn't read anything else in `~/bannerlord/configs/`. Everything else comes from the modes.
 
-**Riderless horses leave the map** instead of wandering around it all round: once a horse's rider is dead,
-it runs to the nearest map edge (the game's retreat order); the game takes it from there. A horse whose rider dismounted and is alive stays, so players can remount. There's no server option
-for this.
-
 **Joins and leaves** are announced in chat ("Aesten joined.", "Aesten left.").
 
 **Standby.** Once nobody has been on the server for 60 s, the mission ends and the server waits between
