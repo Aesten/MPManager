@@ -30,7 +30,7 @@ public static class ModCommands
 
     private static readonly List<Entry> Registered = new List<Entry>();
 
-    // names: the command and its other names, without prefix ("b", "mpb").
+    // names: the command, then its other names (shown as its aliases), without prefix ("mpb", "b").
     // run(peer, args, reply): the arguments after the command name; peer is null for the server console (mpm cmd);
     // reply answers the caller privately (or in the log for the console). Called on the main thread, outside packet
     // handling, so the mod can send network messages directly.

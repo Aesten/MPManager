@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
 
 namespace MPManager;
@@ -14,6 +16,33 @@ internal static class ServerLog
 {
     private static readonly object Lock = new object();
     private static StreamWriter _writer;
+
+    // Lines printed on the main thread while a command from the control socket runs: its reply.
+    private static List<string> _capture;
+    private static int _captureThread;
+
+    public static void BeginCapture()
+    {
+        _capture = new List<string>();
+        _captureThread = Environment.CurrentManagedThreadId;
+    }
+
+    public static List<string> EndCapture()
+    {
+        List<string> captured = _capture ?? new List<string>();
+        _capture = null;
+        return captured;
+    }
+
+    // Called by LogFilter for every printed message; other threads (lobby traffic) aren't the command's output.
+    public static void Capture(string message)
+    {
+        List<string> capture = _capture;
+        if (capture != null && message != null && Environment.CurrentManagedThreadId == _captureThread)
+        {
+            capture.AddRange(message.Split('\n').Select(l => l.TrimEnd()).Where(l => l.Length > 0));
+        }
+    }
 
     public static void Open()
     {

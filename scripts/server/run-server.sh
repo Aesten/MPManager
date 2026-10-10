@@ -17,7 +17,7 @@
 # to the server's Modules/Native/.run-config.txt with the start time appended to the server name (see RUN_CONFIG
 # below); edit the one in configs/, not the copy.
 # Server output is also written to server.log next to this script; logs of earlier runs are
-# moved to logs/server-<time>.log.
+# moved to logs/server-<time>.log.gz (kept 30 days, like metrics).
 
 set -euo pipefail
 
@@ -30,8 +30,9 @@ LOG_FILE="$SCRIPT_DIR/server.log"
 # MPManager's own log (dated, filtered, written immediately); mpm console and mpm logs read it.
 MPM_LOG_FILE="$SCRIPT_DIR/mpmanager.log"
 LOG_ARCHIVE="$SCRIPT_DIR/logs"
-# Commands written to this named pipe are run by MPManager (the server's own console input doesn't work on Linux).
-COMMAND_FIFO="$SCRIPT_DIR/console.fifo"
+# MPManager takes commands on this local socket and answers them (mpm cmd); the server's own console input
+# doesn't work on Linux.
+CONTROL_SOCKET="$SCRIPT_DIR/control.sock"
 SESSION="bannerlord"
 PORT=7210
 TICKRATE=140
@@ -104,7 +105,7 @@ if [ "$INNER" = 1 ]; then
   # The server picks each module's bin/<folder> from its working directory's name,
   # so it has to run from inside Linux64_Shipping_Server.
   cd "$SERVER_BIN"
-  export MPM_CONSOLE_FIFO="$COMMAND_FIFO"
+  export MPM_CONTROL_SOCKET="$CONTROL_SOCKET"
   export MPM_LOG_FILE
   export MPM_ALIASES_FILE="$SCRIPT_DIR/aliases.txt"
   export MPM_MAP_NAMES_FILE="$SCRIPT_DIR/maps.txt"
@@ -112,6 +113,8 @@ if [ "$INNER" = 1 ]; then
   export MPM_SETTINGS_FILE="$SCRIPT_DIR/settings.txt"
   # Server and per-player performance numbers, a pair of CSV files per run (see Metrics.cs, mpm perf).
   export MPM_METRICS_DIR="$SCRIPT_DIR/metrics"
+  # MPBalancer's hit and bump CSVs go with the metrics (same retention).
+  export MPB_DATA_DIR="$SCRIPT_DIR/metrics"
   exec dotnet TaleWorlds.Starter.DotNetCore.Linux.dll \
     "_MODULES_*${MODULES}*_MODULES_" \
     /dedicatedcustomserverconfigfile "$CONFIG" \
@@ -132,10 +135,7 @@ if [ "$VANILLA" = 0 ] && [ ! -f "$DS_DIR/Modules/MPBalancer/bin/Linux64_Shipping
   echo "MPBalancer is not installed in $DS_DIR/Modules (run mpbalancer's scripts/deploy.sh, or use --vanilla)." >&2
   exit 1
 fi
-if [ ! -p "$COMMAND_FIFO" ]; then
-  rm -f "$COMMAND_FIFO"
-  mkfifo "$COMMAND_FIFO"
-fi
+rm -f "$SCRIPT_DIR/console.fifo" # the command pipe of earlier versions
 if session_running || server_process_running; then
   echo "A server is already running (screen -r $SESSION to attach, or $0 --stop)." >&2
   exit 1
@@ -152,21 +152,25 @@ INNER_ARGS=(--inner --config "$RUN_CONFIG" --tickrate "$TICKRATE")
 [ "$VANILLA" = 1 ] && INNER_ARGS+=(--vanilla)
 [ "$MANAGER" = 0 ] && INNER_ARGS+=(--no-manager)
 
-# Keep previous logs (named after their last write time) instead of overwriting them; the 20 newest are kept.
+# Keep previous logs (named after their last write time) instead of overwriting them, gzipped; logs and metrics
+# older than KEEP_DAYS are deleted. Metrics files are named after their run's start; the ones there now are from
+# earlier runs (this run's are created once the server is up).
+KEEP_DAYS=30
 archive_log () {
   local file="$1" prefix="$2"
   if [ -f "$file" ]; then
     mkdir -p "$LOG_ARCHIVE"
-    mv "$file" "$LOG_ARCHIVE/$prefix-$(date -r "$file" +%Y%m%d-%H%M%S).log"
-    ls -1t "$LOG_ARCHIVE"/"$prefix"-*.log | tail -n +21 | xargs -r rm -f
+    local archived="$LOG_ARCHIVE/$prefix-$(date -r "$file" +%Y%m%d-%H%M%S).log"
+    mv "$file" "$archived"
+    gzip -f "$archived"
   fi
 }
 archive_log "$LOG_FILE" server
 archive_log "$MPM_LOG_FILE" mpmanager
-# Metrics files are named after their run's start; keep the 20 newest of each kind.
-for kind in server players; do
-  { ls -1t "$SCRIPT_DIR/metrics/$kind"-*.csv 2>/dev/null || true; } | tail -n +21 | xargs -r rm -f
-done
+mkdir -p "$LOG_ARCHIVE" "$SCRIPT_DIR/metrics"
+find "$LOG_ARCHIVE" -name '*.log' -exec gzip -f {} +
+find "$SCRIPT_DIR/metrics" -name '*.csv' -exec gzip -f {} +
+find "$LOG_ARCHIVE" "$SCRIPT_DIR/metrics" -name '*.gz' -mtime +"$KEEP_DAYS" -delete
 # screen flushes its log file only every 10 s by default; flush every second so the log (and mpm console)
 # keep up with the server. -c replaces ~/.screenrc for this session only.
 SCREENRC="$SCRIPT_DIR/.screenrc"

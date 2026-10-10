@@ -3,7 +3,9 @@ using TaleWorlds.Library;
 namespace MPManager;
 
 // Wraps the game's debug manager to drop routine lobby traffic from the log, and copies everything else to
-// ServerLog. Every Debug.Print goes through Debug.DebugManager; other calls are passed through unchanged.
+// ServerLog (mpmanager.log) minus routine lines that say nothing about how the server is doing. Every Debug.Print
+// goes through Debug.DebugManager; other calls are passed through unchanged. The console, and so server.log,
+// still gets the routine lines: it's the raw record (and the only place native crash output appears).
 //
 // A healthy keepalive (every 2 s) prints four lines: "Http Post Request to ...", "Protocol version used for post
 // request to ...", and "ClientRestSessionTask::SetFinishedAsSuccessful::...AliveMessage" with and without " done".
@@ -34,13 +36,51 @@ internal sealed class LogFilter : IDebugManager
                 || message.StartsWith("ClientRestSessionTask::SetFinishedAsSuccessful::TaleWorlds.Diamond.Rest.AliveMessage"));
     }
 
+    // Printed many times per player and mission, or at every startup, with nothing to act on. Lobby failures and
+    // retries print other lines, so they stay.
+    private static readonly string[] RoutinePrefixes =
+    {
+        "ClientRestSessionTask::SetFinishedAsSuccessful::", // lobby request done
+        "ClientRestSessionTask::WaitUntilFinished::",
+        "HasSpawnedAgentVisuals = false for peer: ",        // every equipment change
+        ">#< Can't send the info of ",                       // player sync on joining a mission, with the 4 below
+        "isDisconnectedPeer: ",
+        "networkPeer.IsSynchronized: ",
+        "networkPeer.JustReconnecting: ",
+        "peer == networkPeer: ",
+        "Set the team to: ",                                 // the ">SBC => ... is switching" line says the same
+        "opening ../../",                                    // startup file loading
+        "Loading xml file: ",
+        "Loading assembly: ",
+        "Assembly load result: ",
+        "Searching ",
+        "Found ",
+    };
+
+    private static bool IsRoutine(string message)
+    {
+        foreach (string prefix in RoutinePrefixes)
+        {
+            if (message.StartsWith(prefix))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public void Print(string message, int logLevel, Debug.DebugColor color, ulong debugFilter)
     {
-        if (!IsNoise(message))
+        if (IsNoise(message))
+        {
+            return;
+        }
+        ServerLog.Capture(message);
+        if (message == null || !IsRoutine(message))
         {
             ServerLog.Write(message);
-            _inner.Print(message, logLevel, color, debugFilter);
         }
+        _inner.Print(message, logLevel, color, debugFilter);
     }
 
     public void ShowWarning(string message) => _inner.ShowWarning(message);

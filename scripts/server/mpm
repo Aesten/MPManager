@@ -2,7 +2,8 @@
 # Controls the Bannerlord dedicated server on this machine.
 #
 # Usage: mpm <command> [args]
-#   cmd <command...>     send a console command and print what it logged, e.g. mpm cmd mpm_lobby
+#   cmd <command...>     run a command and print the server's answer: chat commands (mpm cmd maps) or
+#                        console commands and options (mpm cmd MaxNumberOfPlayers 20)
 #   logs [-f] [-n N]     the last N (default 50) log lines without noise, -f to follow; --all: unfiltered
 #   perf [-n N] [--players]  the last N (default 12, two minutes) rows of this run's server metrics, or with
 #                        --players the per-player ones (ping, jitter, loss); columns are explained in Metrics.cs
@@ -10,8 +11,8 @@
 #   stop | restart | status
 #
 # Lives in ~/bannerlord/ next to run-server.sh, linked as ~/.local/bin/mpm; mpManager's scripts/deploy.sh
-# installs both. Commands go through MPManager's command pipe (console.fifo), because the server's own
-# console input doesn't work on Linux. Logs come from mpmanager.log, which MPManager writes as lines are
+# installs both. Commands go to MPManager's control socket (control.sock), which answers them; the server's
+# own console input doesn't work on Linux. Logs come from mpmanager.log, which MPManager writes as lines are
 # printed; server.log is screen's raw copy of the console, for anything missing there.
 
 set -uo pipefail
@@ -21,7 +22,7 @@ SELF="$(readlink -f "${BASH_SOURCE[0]}")"
 SCRIPT_DIR="$(dirname "$SELF")"
 RUN_SERVER="$SCRIPT_DIR/run-server.sh"
 LOG_FILE="$SCRIPT_DIR/mpmanager.log"
-COMMAND_FIFO="$SCRIPT_DIR/console.fifo"
+CONTROL_SOCKET="$SCRIPT_DIR/control.sock"
 METRICS_DIR="$SCRIPT_DIR/metrics"
 SERVER_PATTERN="^dotnet TaleWorlds.Starter.DotNetCore.Linux.dll"
 
@@ -38,7 +39,7 @@ NOISE=(
 )
 
 usage () {
-  sed -n '4,11p' "$SELF" | sed 's/^# \{0,1\}//'
+  sed -n '4,12p' "$SELF" | sed 's/^# \{0,1\}//'
 }
 
 filter () {
@@ -50,15 +51,16 @@ command="${1:-}"
 case "$command" in
   cmd)
     [ $# -gt 0 ] || { echo "Usage: mpm cmd <command...>" >&2; exit 1; }
-    before=$(stat -c %s "$LOG_FILE" 2>/dev/null || echo 0)
-    # Writing blocks until the server reads the pipe; give up if it isn't reading.
-    if ! timeout 3 bash -c 'printf "%s\n" "$1" > "$2"' _ "$*" "$COMMAND_FIFO"; then
-      echo "Server is not reading commands (not running, or started without MPManager)." >&2
+    [ -S "$CONTROL_SOCKET" ] || { echo "Server is not taking commands (not running, or started without MPManager)." >&2; exit 1; }
+    # One command per connection; the server answers with what the command printed, then closes. -t: how long
+    # to wait for the answer after sending (map loads can hold the server up for a few seconds).
+    if ! reply="$(printf '%s
+' "$*" | socat -t 35 - UNIX-CONNECT:"$CONTROL_SOCKET" 2>/dev/null)"; then
+      echo "Server is not taking commands (not running, or started without MPManager)." >&2
       exit 1
     fi
-    sleep 1
-    # Everything logged since, from the echo of this command on.
-    tail -c +"$((before + 1))" "$LOG_FILE" | sed -n '/\[MPManager\] > /,$p' | filter | head -n 60
+    if [ -n "$reply" ]; then printf '%s
+' "$reply"; else echo "(done, nothing printed)"; fi
     ;;
   logs)
     follow=""

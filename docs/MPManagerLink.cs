@@ -7,7 +7,7 @@
 //
 // Usage, when the mod would attach its own chat hook (e.g. once per mission):
 //
-//   if (MPManagerLink.TryRegister(new[] { "b", "mpb" }, "<setting> [value]", "Show or change settings.",
+//   if (MPManagerLink.TryRegister(new[] { "mpb", "b" }, "<setting> [value]", "Show or change settings.",
 //       adminOnly: true, Run))
 //   {
 //       return; // routed: don't hook chat (or unhook it), or commands would run twice

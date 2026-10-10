@@ -11,7 +11,7 @@ at runtime) is in `../BannerlordDecompiled/notes/dedicated-server-runtime.md`.
 
 **Chat commands.** Messages starting with `!` or `/` are never shown in chat; the server handles them and
 answers privately, and changes are announced to everyone. Admin commands need the server's admin password
-(join with it); the command pipe (`mpm cmd`) counts as an admin.
+(join with it); `mpm cmd` on the server counts as an admin.
 
 | Command | Aliases | Who | Effect |
 |---|---|---|---|
@@ -40,7 +40,7 @@ referencing it, and still work alone. Copy `docs/MPManagerLink.cs` into the mod 
 where the mod would hook chat, call:
 
 ```csharp
-if (MPManagerLink.TryRegister(new[] { "b", "mpb" }, "<setting> [value]", "Show or change settings.",
+if (MPManagerLink.TryRegister(new[] { "mpb", "b" }, "<setting> [value]", "Show or change settings.",
     adminOnly: true, Run))
 {
     return; // routed by MPManager: don't hook chat, or commands run twice
@@ -137,8 +137,12 @@ next one starts. Not seen so far; vanilla waits 10 s and has no setting for it.
 
 **Logs and server commands.** MPManager writes its own log, `~/bannerlord/mpmanager.log`: every line as
 it's printed, dated, without the engine's blank lines or the lobby keepalive (four lines every 2 s).
-Commands are sent through a named pipe (`~/bannerlord/console.fifo`), because the server's own console
-input doesn't work on Linux. Chat commands work there too, as an admin.
+Commands go to a local control socket, `~/bannerlord/control.sock` (the server's own console input doesn't
+work on Linux). It's a Unix domain socket: only programs on the server, run by the server's user, can connect;
+nothing is open to the network. One command per connection: the server runs it on its main thread and
+answers with everything it printed meanwhile (a chat command's replies and announcements, or the console's
+own output), then closes. `mpm cmd` is the client; by hand:
+`echo "/maps" | socat -t 30 - UNIX-CONNECT:$HOME/bannerlord/control.sock`. Chat commands run as an admin.
 
 ## Building
 
@@ -161,16 +165,19 @@ extension points and reflection instead, for example by taking the place of Chat
 On the server, `mpm` (installed as `~/bannerlord/mpm`, linked from `~/.local/bin`):
 
 ```sh
-mpm cmd /setmap lighthouse  # a chat command, as an admin ("/" avoids bash's "!" history expansion)
+mpm cmd setmap lighthouse   # a chat command, as an admin: with "/" or no prefix ("!" trips bash's history expansion)
 mpm cmd MaxNumberOfPlayers 12   # a server option or console command
 mpm logs [-f] [-n 100]     # recent log lines without noise, -f to follow; --all for everything
 mpm perf [-n 30] [--players]   # recent performance numbers, or per-player ping/jitter/loss
 mpm start | stop | restart | status
 ```
 
-`mpm cmd` prints what the command logged. `mpm logs` hides routine lines listed in `NOISE` at the top of
-`scripts/server/mpm`. `server.log` is screen's raw copy of the console. Both logs are archived to
-`~/bannerlord/logs/` (20 of each kept) when the server starts. The server runs detached in screen; nothing
+`mpm cmd` prints the server's answer to the command. `mpmanager.log` leaves out routine game lines that say nothing
+about how the server is doing (per-player sync chatter, lobby bookkeeping, startup file loading; the list is
+in `src/MPManager/LogFilter.cs`), and `mpm logs` hides a few more (`NOISE` at the top of `scripts/server/mpm`).
+`server.log` is screen's raw copy of the console, with everything: it's the only place native crash output
+appears. When the server starts, both logs of the previous run are gzipped into `~/bannerlord/logs/`
+(read them with `zless`/`zgrep`), and logs and metrics older than 30 days are deleted. The server runs detached in screen; nothing
 prints to your terminal unless you ask for it.
 
 An option set with `mpm cmd` is also kept for later missions (the console alone only changes the current one).
@@ -180,7 +187,7 @@ An option set with `mpm cmd` is also kept for later missions (the console alone 
 reached against the `/tickrate` target, tick-to-tick times (average, median, 99th percentile, worst), the share
 of late ticks (over 1.5x the target interval, felt as stutter), CPU in % of one core, memory, .NET heap, full
 garbage collections and threads. `players-<start>.csv` has one row per player per 10 s: the game's averaged
-ping (min, max, and its standard deviation as jitter) and packet loss. 20 runs of each are kept. Columns are
+ping (min, max, and its standard deviation as jitter) and packet loss. Earlier runs' files are gzipped and kept 30 days. Columns are
 described in `src/MPManager/Metrics.cs`. Network bandwidth per server can't be told apart from inside one
 process on a shared host; under Docker it's per container.
 
@@ -214,9 +221,11 @@ helper sends them to players who don't have them. The server only sees new maps 
 
 - It reads the auth token from `token.txt` and `cd`s into `bin/Linux64_Shipping_Server` before starting (that folder's name decides where module DLLs are loaded from).
 - The server name gets the start time (Paris time) appended, e.g. `Neko - 22:32`, so a restarted server can be told apart from the stale entry the server list keeps for a while. The server runs from a copy of the config with that name, `Modules/Native/.run-config.txt`, rewritten at each start; edit `~/bannerlord/configs/base-config.txt`, never the copy.
-- Output goes to `~/bannerlord/server.log`; logs of earlier runs are moved to `~/bannerlord/logs/server-<time>.log` (20 kept). The server prints its full command line, auth token included, into its logs, so don't share them.
+- Output goes to `~/bannerlord/server.log`; logs of earlier runs are moved to `~/bannerlord/logs/server-<time>.log.gz` (kept 30 days). The server prints its full command line, auth token included, into its logs, so don't share them.
 - `--stop` sends SIGTERM: the server ignores SIGHUP, so closing the screen session alone leaves it running.
 
 ## Planned
 
-- A per-team player cap with overflow to spectators (6 per team for Skirmish).
+See [docs/roadmap.md](docs/roadmap.md): performance rules for passive mod code (stats), publishing (working without our
+launcher, Windows tooling), and hosting several servers (layout, auto-restart, resource limits,
+orchestration, DoS protection).

@@ -11,9 +11,9 @@ using TaleWorlds.MountAndBlade.Diamond;
 
 namespace MPManager;
 
-// Chat commands ("!setmap lighthouse vla stur", or with "/"), from players in chat and from the command pipe
+// Chat commands ("!setmap lighthouse vla stur", or with "/"), from players in chat and from the control socket
 // (mpm cmd /setmap lighthouse). They are never shown in chat (see ChatInterceptor). Commands that change the
-// server are for admins (players who joined with the admin password); the pipe counts as an admin.
+// server are for admins (players who joined with the admin password); the socket (mpm cmd) counts as an admin.
 //
 // Aliases come from MPM_ALIASES_FILE (~/bannerlord/aliases.txt, from scripts/server/aliases.txt), re-read when it
 // changes: "sm = setmap" makes "!sm lighthouse" run "!setmap lighthouse"; an alias can include arguments
@@ -46,12 +46,28 @@ internal static class Commands
     private static readonly Dictionary<string, string> Aliases = new Dictionary<string, string>();
     private static DateTime _aliasesLoadedFor = DateTime.MinValue;
 
-    // Pending kicks, by who asked ("console" for the pipe): the player to kick and until when it can be confirmed.
+    // Pending kicks, by who asked ("console" for mpm cmd): the player to kick and until when it can be confirmed.
     private static readonly Dictionary<string, (NetworkCommunicator Target, DateTime Until)> PendingKicks = new Dictionary<string, (NetworkCommunicator, DateTime)>();
 
     public static void Enqueue(NetworkCommunicator peer, string text)
     {
         Pending.Enqueue((peer, text));
+    }
+
+    // A chat command from the control socket, run at once as an admin; replies go to the log (and so back to the
+    // socket's client, which captures them).
+    public static void RunFromConsole(string text)
+    {
+        Caller caller = new Caller(null);
+        try
+        {
+            Execute(caller, text);
+        }
+        catch (Exception e)
+        {
+            MPManagerSubModule.Log("Command failed: " + text + ": " + e);
+            caller.Reply("That command failed; the server log has the details.");
+        }
     }
 
     // Called every frame on the main thread.
@@ -121,6 +137,15 @@ internal static class Commands
     }
 
     internal static bool IsBuiltIn(string name) => All.Any(c => c.Name == name);
+
+    // A chat command name without its prefix: built-in, alias, or a mod's (so "mpm cmd help" works; the game's
+    // console commands are all different: start_game, end_mission...).
+    internal static bool IsKnown(string name)
+    {
+        name = name.ToLowerInvariant();
+        LoadAliases();
+        return IsBuiltIn(name) || Aliases.ContainsKey(name) || ModCommands.Find(name) != null;
+    }
 
     private static void LoadAliases()
     {
@@ -574,7 +599,7 @@ internal static class Commands
         public Action<Caller, string[]> Run { get; }
     }
 
-    // Who sent a command: a player (replies go to them privately) or the command pipe (replies go to the log).
+    // Who sent a command: a player (replies go to them privately) or mpm cmd (replies go to the log, and from there back to mpm).
     private sealed class Caller
     {
         public Caller(NetworkCommunicator peer)
