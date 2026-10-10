@@ -9,10 +9,13 @@
 #   -d, --detach     start the screen session detached (for use over ssh)
 #   --vanilla        start without MPBalancer, for A/B comparisons
 #   --no-manager     start without MPManager
-#   --config <file>  server config, relative to Modules/Native (default: config.txt)
+#   --config <file>  server config, in ~/bannerlord/configs/ or a path (default: base-config.txt)
 #   --tickrate <n>   server tick rate in Hz (default: 140)
 #   --stop           stop a running server and wait for it to exit
 #
+# The config lives in ~/bannerlord/configs/ (base-config.txt: server name, passwords...). At each start it's copied
+# to the server's Modules/Native/.run-config.txt with the start time appended to the server name (see RUN_CONFIG
+# below); edit the one in configs/, not the copy.
 # Server output is also written to server.log next to this script; logs of earlier runs are
 # moved to logs/server-<time>.log.
 
@@ -35,7 +38,8 @@ TICKRATE=140
 
 VANILLA=0
 MANAGER=1
-CONFIG="config.txt"
+CONFIG="base-config.txt"
+CONFIG_DIR="$SCRIPT_DIR/configs"
 DETACH=0
 INNER=0
 STOP=0
@@ -105,6 +109,9 @@ if [ "$INNER" = 1 ]; then
   export MPM_ALIASES_FILE="$SCRIPT_DIR/aliases.txt"
   export MPM_MAP_NAMES_FILE="$SCRIPT_DIR/maps.txt"
   export MPM_MODES_DIR="$SCRIPT_DIR/modes"
+  export MPM_SETTINGS_FILE="$SCRIPT_DIR/settings.txt"
+  # Server and per-player performance numbers, a pair of CSV files per run (see Metrics.cs, mpm perf).
+  export MPM_METRICS_DIR="$SCRIPT_DIR/metrics"
   exec dotnet TaleWorlds.Starter.DotNetCore.Linux.dll \
     "_MODULES_*${MODULES}*_MODULES_" \
     /dedicatedcustomserverconfigfile "$CONFIG" \
@@ -118,7 +125,9 @@ fi
 [[ "$TICKRATE" =~ ^[1-9][0-9]*$ ]] || { echo "Invalid tick rate: $TICKRATE (expected a positive integer)" >&2; exit 1; }
 [ -s "$TOKEN_FILE" ] || { echo "Missing or empty token file: $TOKEN_FILE" >&2; exit 1; }
 [ -f "$SERVER_BIN/TaleWorlds.Starter.DotNetCore.Linux.dll" ] || { echo "Server not found in: $SERVER_BIN" >&2; exit 1; }
-[ -f "$DS_DIR/Modules/Native/$CONFIG" ] || { echo "Config not found: $DS_DIR/Modules/Native/$CONFIG" >&2; exit 1; }
+# A bare name is a file in configs/; anything with a slash is a path.
+[[ "$CONFIG" == */* ]] && CONFIG_FILE="$CONFIG" || CONFIG_FILE="$CONFIG_DIR/$CONFIG"
+[ -f "$CONFIG_FILE" ] || { echo "Config not found: $CONFIG_FILE" >&2; exit 1; }
 if [ "$VANILLA" = 0 ] && [ ! -f "$DS_DIR/Modules/MPBalancer/bin/Linux64_Shipping_Server/MPBalancer.dll" ]; then
   echo "MPBalancer is not installed in $DS_DIR/Modules (run mpbalancer's scripts/deploy.sh, or use --vanilla)." >&2
   exit 1
@@ -132,7 +141,14 @@ if session_running || server_process_running; then
   exit 1
 fi
 
-INNER_ARGS=(--inner --config "$CONFIG" --tickrate "$TICKRATE")
+# The server list is slow to drop a stopped server's entry, so a restarted server would show up twice under the
+# same name: run from a copy of the config whose ServerName ends with the start time (Paris time), e.g. "Neko - 22:32".
+STARTED="- $(TZ=Europe/Paris date +'%H:%M')"
+RUN_CONFIG=".run-config.txt"
+sed -E "s/^(ServerName[[:space:]]+.*[^[:space:]])[[:space:]]*\$/\1 $STARTED/" \
+  "$CONFIG_FILE" > "$DS_DIR/Modules/Native/$RUN_CONFIG"
+
+INNER_ARGS=(--inner --config "$RUN_CONFIG" --tickrate "$TICKRATE")
 [ "$VANILLA" = 1 ] && INNER_ARGS+=(--vanilla)
 [ "$MANAGER" = 0 ] && INNER_ARGS+=(--no-manager)
 
@@ -147,6 +163,10 @@ archive_log () {
 }
 archive_log "$LOG_FILE" server
 archive_log "$MPM_LOG_FILE" mpmanager
+# Metrics files are named after their run's start; keep the 20 newest of each kind.
+for kind in server players; do
+  { ls -1t "$SCRIPT_DIR/metrics/$kind"-*.csv 2>/dev/null || true; } | tail -n +21 | xargs -r rm -f
+done
 # screen flushes its log file only every 10 s by default; flush every second so the log (and mpm console)
 # keep up with the server. -c replaces ~/.screenrc for this session only.
 SCREENRC="$SCRIPT_DIR/.screenrc"
@@ -154,7 +174,7 @@ printf 'logfile flush 1
 ' > "$SCREENRC"
 if [ "$DETACH" = 1 ]; then
   screen -c "$SCREENRC" -L -Logfile "$LOG_FILE" -dmS "$SESSION" bash "$SELF" "${INNER_ARGS[@]}"
-  echo "Server starting in screen session '$SESSION' (modules: $MODULES, config: $CONFIG, tickrate: $TICKRATE). Log: $LOG_FILE"
+  echo "Server starting in screen session '$SESSION' (modules: $MODULES, config: $CONFIG_FILE, tickrate: $TICKRATE). Log: $LOG_FILE"
 else
   screen -c "$SCREENRC" -L -Logfile "$LOG_FILE" -S "$SESSION" bash "$SELF" "${INNER_ARGS[@]}"
 fi

@@ -22,7 +22,7 @@ internal static class ServerChat
     public static void Broadcast(string text)
     {
         MPManagerSubModule.Log(text);
-        foreach (NetworkCommunicator peer in GameNetwork.NetworkPeers)
+        foreach (NetworkCommunicator peer in Peers.All)
         {
             Send(peer, text);
         }

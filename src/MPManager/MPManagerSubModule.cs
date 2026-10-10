@@ -33,6 +33,15 @@ public class MPManagerSubModule : MBSubModuleBase
     protected override void OnApplicationTick(float dt)
     {
         base.OnApplicationTick(dt);
+        try
+        {
+            Metrics.Tick();
+        }
+        catch (Exception e)
+        {
+            Metrics.Disable();
+            Log("Metrics stopped after an error: " + e);
+        }
         CommandInput.Tick();
         if (_failed)
         {
@@ -44,6 +53,8 @@ public class MPManagerSubModule : MBSubModuleBase
             Commands.Tick();
             MissionFlow.Tick();
             ReadyCheck.Tick();
+            Standby.Tick();
+            Horses.Tick();
         }
         catch (Exception e)
         {

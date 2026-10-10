@@ -4,6 +4,9 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using TaleWorlds.MountAndBlade;
+using NetworkMessages.FromServer;
+using TaleWorlds.Core;
+using TaleWorlds.Library;
 using TaleWorlds.MountAndBlade.Diamond;
 
 namespace MPManager;
@@ -17,9 +20,6 @@ namespace MPManager;
 // ("ewf = endwarmup --force"), and anything typed after it is appended.
 internal static class Commands
 {
-    // Commands of other server mods: not answered with "unknown command" (they get the message too).
-    private static readonly HashSet<string> OtherModsCommands = new HashSet<string> { "b", "mpb" };
-
     private const double KickConfirmSeconds = 30;
 
     private static readonly ConcurrentQueue<(NetworkCommunicator Peer, string Text)> Pending = new ConcurrentQueue<(NetworkCommunicator, string)>();
@@ -27,7 +27,7 @@ internal static class Commands
     private static readonly List<Command> All = new List<Command>
     {
         new Command("help", "[command]", "List the commands with their aliases, or show one command's usage.", admin: false, Help),
-        new Command("maps", "", "Numbered list of the maps for the current mode.", admin: false, ListMaps),
+        new Command("maps", "", "Numbered list of the maps for the current mode, variants in brackets.", admin: false, ListMaps),
         new Command("mode", "[mode] [map]", "Show the modes, or switch to one (optionally on a map) and restart.", admin: true, SwitchMode),
         new Command("bots", "[team1 team2]", "Show or set the number of bots per team (modes with bots only, e.g. tdm).", admin: true, Bots),
         new Command("specs", "", "List the spectators.", admin: false, Specs),
@@ -39,6 +39,8 @@ internal static class Commands
         new Command("endwarmup", "[--force]", "End this mission's warmup (infinite until then): 30 s countdown, or 3 s with --force.", admin: true, EndWarmup),
         new Command("kick", "<player> [--confirm]", "Kick the closest-named player; confirm with !confirm or --confirm.", admin: true, Kick),
         new Command("confirm", "", "Confirm a pending !kick.", admin: true, Confirm),
+        new Command("tp", "<player> [to-player]", "Move a player to another player's position (!tp p1 p2), or yourself to a player (!tp p2).", admin: true, Teleport),
+        new Command("kill", "[player]", "Kill yourself, or the closest-named player.", admin: true, Kill),
     };
 
     private static readonly Dictionary<string, string> Aliases = new Dictionary<string, string>();
@@ -96,10 +98,18 @@ internal static class Commands
         Command command = All.FirstOrDefault(c => c.Name == name);
         if (command == null)
         {
-            if (!OtherModsCommands.Contains(name))
+            ModCommands.Entry modCommand = ModCommands.Find(name);
+            if (modCommand == null)
             {
                 caller.Reply("Unknown command !" + name + ". !help lists the commands.");
+                return;
             }
+            if (modCommand.AdminOnly && !caller.IsAdmin)
+            {
+                caller.Reply("!" + name + " is for admins (join with the admin password).");
+                return;
+            }
+            modCommand.Run(caller.Peer, args, caller.Reply);
             return;
         }
         if (command.Admin && !caller.IsAdmin)
@@ -109,6 +119,8 @@ internal static class Commands
         }
         command.Run(caller, args);
     }
+
+    internal static bool IsBuiltIn(string name) => All.Any(c => c.Name == name);
 
     private static void LoadAliases()
     {
@@ -138,7 +150,7 @@ internal static class Commands
             {
                 continue;
             }
-            if (All.Any(c => c.Name == alias))
+            if (All.Any(c => c.Name == alias) || ModCommands.Find(alias) != null)
             {
                 MPManagerSubModule.Log("Alias '" + alias + "' ignored: that's a command name.");
                 continue;
@@ -154,6 +166,7 @@ internal static class Commands
     {
         LoadAliases();
         List<Command> available = All.Where(c => caller.IsAdmin || !c.Admin).ToList();
+        List<ModCommands.Entry> modAvailable = ModCommands.All.Where(c => caller.IsAdmin || !c.AdminOnly).ToList();
         if (args.Length > 0)
         {
             string name = args[0].TrimStart('!', '/').ToLowerInvariant();
@@ -162,50 +175,62 @@ internal static class Commands
                 name = expansion.Split(' ')[0].ToLowerInvariant();
             }
             Command command = available.FirstOrDefault(c => c.Name == name);
-            if (command == null)
+            ModCommands.Entry modCommand = modAvailable.FirstOrDefault(c => c.Names.Contains(name));
+            if (command != null)
+            {
+                caller.Reply("!" + command.Name + (command.Usage.Length > 0 ? " " + command.Usage : "") + AliasText(command.Name));
+                caller.Reply(command.Description);
+            }
+            else if (modCommand != null)
+            {
+                caller.Reply("!" + modCommand.Name + (modCommand.Usage.Length > 0 ? " " + modCommand.Usage : "") + AliasText(modCommand.Name, modCommand.Names.Skip(1)));
+                caller.Reply(modCommand.Description + " (" + modCommand.Mod + ")");
+            }
+            else
             {
                 caller.Reply("No command !" + args[0].TrimStart('!', '/') + ". !help lists them.");
-                return;
             }
-            caller.Reply("!" + command.Name + (command.Usage.Length > 0 ? " " + command.Usage : "") + AliasText(command));
-            caller.Reply(command.Description);
             return;
         }
         foreach (Command command in available)
         {
-            caller.Reply("!" + command.Name + AliasText(command));
+            caller.Reply("!" + command.Name + AliasText(command.Name));
+        }
+        foreach (ModCommands.Entry modCommand in modAvailable)
+        {
+            caller.Reply("!" + modCommand.Name + AliasText(modCommand.Name, modCommand.Names.Skip(1)) + "  [" + modCommand.Mod + "]");
         }
         caller.Reply("!help <command> for details.");
     }
 
-    // "  (!ew, !ewf = --force)", or "" without aliases.
-    private static string AliasText(Command command)
+    // "  (!ew, !ewf = --force)", or "" without aliases; extra: other names the command has (a mod's "!mpb").
+    private static string AliasText(string commandName, IEnumerable<string> extra = null)
     {
-        List<string> aliases = Aliases
-            .Where(a => a.Value.Split(' ')[0].Equals(command.Name, StringComparison.OrdinalIgnoreCase))
+        List<string> aliases = (extra ?? Enumerable.Empty<string>()).Select(n => "!" + n).ToList();
+        aliases.AddRange(Aliases
+            .Where(a => a.Value.Split(' ')[0].Equals(commandName, StringComparison.OrdinalIgnoreCase))
             .OrderBy(a => a.Value.Length).ThenBy(a => a.Key)
             .Select(a =>
             {
-                string extra = a.Value.Substring(a.Value.Split(' ')[0].Length).Trim();
-                return "!" + a.Key + (extra.Length > 0 ? " = " + extra : "");
-            })
-            .ToList();
+                string rest = a.Value.Substring(a.Value.Split(' ')[0].Length).Trim();
+                return "!" + a.Key + (rest.Length > 0 ? " = " + rest : "");
+            }));
         return aliases.Count == 0 ? "" : "  (" + string.Join(", ", aliases) + ")";
     }
 
     private static void ListMaps(Caller caller, string[] args)
     {
-        List<Choice> maps = Modes.CurrentMaps();
+        List<MapGroup> groups = MapNames.Group(Modes.CurrentMaps());
         caller.Reply((Modes.Current?.Name ?? MissionFlow.GameType) + " maps (now: " + MapNames.Display(MultiplayerOptions.OptionType.Map.GetStrValue()) + "):");
-        for (int i = 0; i < maps.Count; i++)
+        for (int i = 0; i < groups.Count; i++)
         {
-            caller.Reply((i + 1) + ". " + maps[i]);
+            caller.Reply((i + 1) + ". " + groups[i]);
         }
     }
 
     private static void Specs(Caller caller, string[] args)
     {
-        List<string> spectators = GameNetwork.NetworkPeers
+        List<string> spectators = Peers.All
             .Where(p => p.IsSynchronized && !p.IsServerPeer)
             .Where(p =>
             {
@@ -229,11 +254,12 @@ internal static class Commands
         if (args[0].Equals("current", StringComparison.OrdinalIgnoreCase) || args[0].Equals("c", StringComparison.OrdinalIgnoreCase))
         {
             string current = MultiplayerOptions.OptionType.Map.GetStrValue();
-            map = new Choice(current, MapNames.For(current));
+            map = MapNames.Choice(current);
         }
         else
         {
-            map = Matcher.Resolve(args[0], Modes.CurrentMaps(), out error);
+            List<Choice> maps = Modes.CurrentMaps();
+            map = Matcher.Resolve(args[0], maps, out error, MapNames.Group(maps).Select(g => g.First).ToList());
         }
         if (map == null)
         {
@@ -301,7 +327,8 @@ internal static class Commands
         string map = null;
         if (args.Length == 2)
         {
-            Choice mapChoice = Matcher.Resolve(args[1], mode.Maps(), out error);
+            List<Choice> maps = mode.Maps();
+            Choice mapChoice = Matcher.Resolve(args[1], maps, out error, MapNames.Group(maps).Select(g => g.First).ToList());
             if (mapChoice == null)
             {
                 caller.Reply(error);
@@ -382,15 +409,12 @@ internal static class Commands
             caller.Reply("Usage: !kick <player> [--confirm]");
             return;
         }
-        List<NetworkCommunicator> players = GameNetwork.NetworkPeers.Where(p => !p.IsServerPeer).ToList();
-        List<Choice> choices = players.Select((p, i) => new Choice(i.ToString(), p.UserName)).ToList();
-        Choice choice = Matcher.Resolve(name, choices, out string error);
-        if (choice == null)
+        NetworkCommunicator target = FindPlayer(name, out string error);
+        if (target == null)
         {
-            caller.Reply(players.Count == 0 ? "Nobody to kick." : error);
+            caller.Reply(error);
             return;
         }
-        NetworkCommunicator target = players[int.Parse(choice.Id)];
         if (target == caller.Peer)
         {
             caller.Reply("That's you.");
@@ -420,6 +444,106 @@ internal static class Commands
             return;
         }
         KickNow(caller, pending.Target);
+    }
+
+    // The connected player whose name matches best (see Matcher), or null with the reason in error.
+    private static NetworkCommunicator FindPlayer(string name, out string error)
+    {
+        List<NetworkCommunicator> players = Peers.Players();
+        if (players.Count == 0)
+        {
+            error = "Nobody is on the server.";
+            return null;
+        }
+        List<Choice> choices = players.Select((p, i) => new Choice(i.ToString(), p.UserName)).ToList();
+        Choice choice = Matcher.Resolve(name, choices, out error);
+        return choice == null ? null : players[int.Parse(choice.Id)];
+    }
+
+    // The player's agent if they're alive in the mission, or null with the reason in error.
+    private static Agent AliveAgent(NetworkCommunicator peer, out string error)
+    {
+        Agent agent = peer.GetComponent<MissionPeer>()?.ControlledAgent;
+        if (agent == null || !agent.IsActive())
+        {
+            error = peer.UserName + " isn't alive right now.";
+            return null;
+        }
+        error = null;
+        return agent;
+    }
+
+    // !tp p1 p2: p1 (with their horse) to just behind p2, facing the same way. Clients are told with the game's
+    // own teleport message (AgentTeleportToFrame, as UsableMachineAIBase does).
+    private static void Teleport(Caller caller, string[] args)
+    {
+        if (args.Length != 1 && args.Length != 2)
+        {
+            caller.Reply("Usage: !tp <player> <to-player>, or !tp <to-player> to go there yourself.");
+            return;
+        }
+        string error = null;
+        NetworkCommunicator who = args.Length == 2 ? FindPlayer(args[0], out error) : caller.Peer;
+        if (who == null)
+        {
+            caller.Reply(args.Length == 2 ? error : "Name who to move: !tp <player> <to-player>.");
+            return;
+        }
+        NetworkCommunicator to = FindPlayer(args[args.Length - 1], out error);
+        if (to == null)
+        {
+            caller.Reply(error);
+            return;
+        }
+        if (to == who)
+        {
+            caller.Reply("That's the same player.");
+            return;
+        }
+        Agent agent = AliveAgent(who, out error);
+        Agent target = agent == null ? null : AliveAgent(to, out error);
+        if (target == null)
+        {
+            caller.Reply(error);
+            return;
+        }
+        Vec2 facing = target.LookDirection.AsVec2.Normalized();
+        Vec3 position = target.Position - new Vec3(facing * 1.5f);
+        agent.TeleportToPosition(position);
+        agent.SetMovementDirection(in facing);
+        GameNetwork.BeginBroadcastModuleEvent();
+        GameNetwork.WriteMessage(new AgentTeleportToFrame(agent.Index, position, facing));
+        GameNetwork.EndBroadcastModuleEvent(GameNetwork.EventBroadcastFlags.AddToMissionRecord);
+        caller.Announce("Moved " + who.UserName + " to " + to.UserName + ".");
+    }
+
+    // !kill [player]: the same death the game deals to players who stay out of the map's boundary
+    // (MissionBoundaryCrossingHandler); clients see an ordinary death.
+    private static void Kill(Caller caller, string[] args)
+    {
+        string name = string.Join("", args);
+        string error = null;
+        NetworkCommunicator who = name.Length > 0 ? FindPlayer(name, out error) : caller.Peer;
+        if (who == null)
+        {
+            caller.Reply(name.Length > 0 ? error : "Name who to kill: !kill <player>.");
+            return;
+        }
+        Agent agent = AliveAgent(who, out error);
+        if (agent == null)
+        {
+            caller.Reply(error);
+            return;
+        }
+        Blow blow = new Blow(agent.Index);
+        blow.WeaponRecord.FillAsMeleeBlow(null, null, -1, 0);
+        blow.DamageType = DamageTypes.Blunt;
+        blow.BaseMagnitude = 10000f;
+        blow.WeaponRecord.WeaponClass = WeaponClass.Undefined;
+        blow.GlobalPosition = agent.Position;
+        blow.DamagedPercentage = 1f;
+        agent.Die(blow);
+        caller.Announce(who == caller.Peer ? "Killed themselves." : "Killed " + who.UserName + ".");
     }
 
     // What the game does for an admin-panel kick (MultiplayerAdminComponent.KickPlayer), minus its "not an admin" rule.

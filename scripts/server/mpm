@@ -4,6 +4,8 @@
 # Usage: mpm <command> [args]
 #   cmd <command...>     send a console command and print what it logged, e.g. mpm cmd mpm_lobby
 #   logs [-f] [-n N]     the last N (default 50) log lines without noise, -f to follow; --all: unfiltered
+#   perf [-n N] [--players]  the last N (default 12, two minutes) rows of this run's server metrics, or with
+#                        --players the per-player ones (ping, jitter, loss); columns are explained in Metrics.cs
 #   start [options]      start the server in the background; options go to run-server.sh
 #   stop | restart | status
 #
@@ -20,6 +22,7 @@ SCRIPT_DIR="$(dirname "$SELF")"
 RUN_SERVER="$SCRIPT_DIR/run-server.sh"
 LOG_FILE="$SCRIPT_DIR/mpmanager.log"
 COMMAND_FIFO="$SCRIPT_DIR/console.fifo"
+METRICS_DIR="$SCRIPT_DIR/metrics"
 SERVER_PATTERN="^dotnet TaleWorlds.Starter.DotNetCore.Linux.dll"
 
 # Lines "mpm logs" and "mpm cmd" hide (extended regexes). Add more as needed.
@@ -35,7 +38,7 @@ NOISE=(
 )
 
 usage () {
-  sed -n '4,9p' "$SELF" | sed 's/^# \{0,1\}//'
+  sed -n '4,11p' "$SELF" | sed 's/^# \{0,1\}//'
 }
 
 filter () {
@@ -79,6 +82,22 @@ case "$command" in
         tail -n 0 -F "$LOG_FILE" 2>/dev/null | filter
       fi
     fi
+    ;;
+  perf)
+    lines=12
+    kind=server
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        -n) lines="${2:?-n needs a number}"; shift ;;
+        --players) kind=players ;;
+        *) echo "Unknown option: $1" >&2; exit 1 ;;
+      esac
+      shift
+    done
+    file="$(ls -1t "$METRICS_DIR"/"$kind"-*.csv 2>/dev/null | head -n 1)"
+    [ -n "$file" ] || { echo "No metrics yet in $METRICS_DIR." >&2; exit 1; }
+    echo "$file"
+    { head -n 1 "$file"; tail -n +2 "$file" | tail -n "$lines"; } | column -t -s,
     ;;
   start)
     "$RUN_SERVER" -d "$@"

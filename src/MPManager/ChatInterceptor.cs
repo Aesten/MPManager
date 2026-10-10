@@ -13,8 +13,8 @@ namespace MPManager;
 // ChatBox broadcasts every message from its handlers for the client chat messages (PlayerMessageAll,
 // PlayerMessageTeam). Its OnMessageReceivedAtDedicatedServer hook can observe a message but not stop it. So we
 // take those handlers' place in GameNetwork's handler lists:
-// - commands are queued for Commands and passed to OnMessageReceivedAtDedicatedServer, so other mods' commands
-//   (MPBalancer's !b) still work, but nothing is broadcast;
+// - commands are queued for Commands (which also runs mods' commands registered in ModCommands), and passed to
+//   OnMessageReceivedAtDedicatedServer for mods that hook chat themselves, but nothing is broadcast;
 // - everything else goes to ChatBox's own handler unchanged.
 // Tick checks every frame, because ChatBox registers its handlers again whenever the network starts.
 internal static class ChatInterceptor

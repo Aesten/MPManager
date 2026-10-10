@@ -1,14 +1,19 @@
-# Skirmish, for matches: official skirmish maps and custom maps (not the groupfight ones). No bots.
-# Starts on Xauna (mp_skirmish_map_007), Vlandia vs Battania.
+# Skirmish, for matches. No bots. Starts on Xauna (the sunny custom version), Vlandia vs Battania.
+# The pool is the maps kept in maps.txt. Left out: mp_skirmish_map_004 crashes the Linux server when loaded.
 aliases = skirm
 gametype = Skirmish
-maps = mp_skirmish_map_007 official custom -mp_groupfight -mp_ie_performancearena
+maps = mm_mp_skirmish_map_007_sunny
+maps = mp_skirmish_map_002f mp_skirmish_map_002_winter mp_skirmish_map_003_skinc mp_skirmish_map_007
+maps = mp_skirmish_map_007_winter mp_skirmish_map_008_skin mp_skirmish_map_009 mp_skirmish_map_010
+maps = mp_skirmish_map_010_winter mp_skirmish_map_014 mp_skirmish_map_020
+maps = mp_bnl_abandoned_v2 mp_bnl_fortofhonour mp_bnl_ghosttown mp_bnl_lakeside mp_bnl_lighthouse
+maps = mp_bnl_lycaronsdistricts mp_bnl_purplehaze mp_bnl_quarry mp_bnl_vatnborg mp_portomor mp_skirmish_montverd
 bots = no
+default = yes
 
 # Options for the next mission when switching to this mode (same lines as a server config).
 CultureTeam1 vlandia
 CultureTeam2 battania
-MaxNumberOfPlayers 100
 RoundTotal 5
 RoundTimeLimit 420
 RoundPreparationTimeLimit 12

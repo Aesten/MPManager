@@ -52,7 +52,7 @@ internal sealed class Mode
                 ids.Add(rule);
             }
         }
-        return ids.Distinct(StringComparer.OrdinalIgnoreCase).Select(id => new Choice(id, MapNames.For(id))).ToList();
+        return ids.Distinct(StringComparer.OrdinalIgnoreCase).Select(id => MapNames.Choice(id)).ToList();
     }
 }
 
@@ -93,7 +93,7 @@ internal static class Modes
             return mode.Maps();
         }
         return MissionFlow.OfficialMaps(MissionFlow.GameType).Concat(MissionFlow.CustomMaps()).Distinct()
-            .Select(id => new Choice(id, MapNames.For(id))).ToList();
+            .Select(id => MapNames.Choice(id)).ToList();
     }
 
     // At startup, once the config has been applied: the default mode's game type, map and options.
@@ -121,8 +121,18 @@ internal static class Modes
         var modes = current
             ? new[] { MultiplayerOptions.MultiplayerOptionsAccessMode.NextMapOptions, MultiplayerOptions.MultiplayerOptionsAccessMode.CurrentMapOptions }
             : new[] { MultiplayerOptions.MultiplayerOptionsAccessMode.NextMapOptions };
+        Baseline ??= Snapshot();
         foreach (var access in modes)
         {
+            // Options another mode changed (groupfight's SingleSpawn) go back to how the server started, unless
+            // this mode sets them too.
+            foreach (var (option, value) in Baseline)
+            {
+                if (!mode.Options.Any(o => o.Option.Equals(option, StringComparison.OrdinalIgnoreCase)))
+                {
+                    SetOption(option, value, access);
+                }
+            }
             MultiplayerOptions.OptionType.GameType.SetValue(mode.GameType, access);
             MultiplayerOptions.OptionType.Map.SetValue(map, access);
             foreach (var (option, value) in mode.Options)
@@ -137,6 +147,29 @@ internal static class Modes
         }
         _currentName = mode.Name;
         return null;
+    }
+
+    // Every option mode files set, as the server had it before the first mode was applied (the config's values).
+    private static List<(string Option, string Value)> Baseline;
+
+    private static List<(string, string)> Snapshot()
+    {
+        var current = MultiplayerOptions.MultiplayerOptionsAccessMode.CurrentMapOptions;
+        return All.SelectMany(m => m.Options.Select(o => o.Option))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Where(name => MultiplayerOptions.TryGetOptionTypeFromString(name, out _, out _))
+            .Select(name =>
+            {
+                MultiplayerOptions.TryGetOptionTypeFromString(name, out var option, out var property);
+                string value = property.OptionValueType switch
+                {
+                    MultiplayerOptions.OptionValueType.String => option.GetStrValue(current),
+                    MultiplayerOptions.OptionValueType.Bool => option.GetBoolValue(current).ToString(),
+                    _ => option.GetIntValue(current).ToString(),
+                };
+                return (name, value);
+            })
+            .ToList();
     }
 
     // Parses a value the way the server console does (DedicatedServerConsoleCommandManager.HandleConsoleCommand).

@@ -6,7 +6,8 @@ using System.Text;
 namespace MPManager;
 
 // One thing a command argument can name: a map, a culture, a player. Id is what the game uses; Names are what
-// people call it (the first one is how it's shown). Matching looks at the id and every name.
+// people type for it; it's shown by its DisplayName if set, else its first name. Matching looks at the id and every
+// name; variant names ("xauna:winter") only match the base:variant syntax.
 internal sealed class Choice
 {
     public Choice(string id, params string[] names)
@@ -24,11 +25,23 @@ internal sealed class Choice
 
     public IReadOnlyList<string> Names { get; }
 
-    public string Name => Names.Count > 0 ? Names[0] : Id;
+    public string DisplayName { get; init; }
 
-    internal IEnumerable<string> Keys => Names.Prepend(Id);
+    public string Name => DisplayName ?? (Names.Count > 0 ? Names[0] : Id);
 
-    public override string ToString() => string.Equals(Name, Id, StringComparison.OrdinalIgnoreCase) ? Name : Name + " (" + Id + ")";
+    // What to type for it: with a display name, the first name (or the id); otherwise the id.
+    private string Typed => DisplayName != null && Names.Count > 0 ? Names[0] : Id;
+
+    // The id and the names, minus variant names.
+    internal IEnumerable<string> Keys => Names.Where(n => !n.Contains(':')).Prepend(Id);
+
+    // Variant names split into base and variant: "xauna:winter" is ("xauna", "winter").
+    internal IEnumerable<(string Base, string Variant)> Variants => Names
+        .Where(n => n.Contains(':'))
+        .Select(n => (n.Substring(0, n.IndexOf(':')), n.Substring(n.IndexOf(':') + 1)));
+
+    // "Xauna (xauna)", "Vlandia (vlandia)", "mp_tdm_map_001".
+    public override string ToString() => string.Equals(Name, Typed, StringComparison.OrdinalIgnoreCase) ? Name : Name + " (" + Typed + ")";
 }
 
 // Resolves what someone typed in chat (no autocomplete there) to one of a list of choices:
@@ -42,7 +55,8 @@ internal sealed class Choice
 //    the prefix. One mistake is allowed per 4 letters typed; 3 letters or fewer must match exactly (step 3).
 internal static class Matcher
 {
-    public static Choice Resolve(string input, IList<Choice> choices, out string error)
+    // numbered: what numbers pick (the list as !maps prints it), if not the choices themselves.
+    public static Choice Resolve(string input, IList<Choice> choices, out string error, IList<Choice> numbered = null)
     {
         error = null;
         if (choices.Count == 0)
@@ -50,9 +64,15 @@ internal static class Matcher
             error = "Nothing to choose from.";
             return null;
         }
-        if (int.TryParse(input, out int number) && !input.StartsWith("0") && number >= 1 && number <= choices.Count)
+        int colon = input.IndexOf(':');
+        if (colon >= 0)
         {
-            return choices[number - 1];
+            return ResolveVariant(input.Substring(0, colon), input.Substring(colon + 1), choices, out error);
+        }
+        numbered ??= choices;
+        if (int.TryParse(input, out int number) && !input.StartsWith("0") && number >= 1 && number <= numbered.Count)
+        {
+            return numbered[number - 1];
         }
 
         string key = Normalize(input);
@@ -94,6 +114,37 @@ internal static class Matcher
         }
         error = "Nothing matches '" + input + "'. Closest: " + Describe(ranked.Take(3).Select(r => r.Choice).ToList()) + ".";
         return null;
+    }
+
+    // "base:variant": the base is matched among the bases of all variant names, then the variant among that base's
+    // variants, each the same way as a whole name, so "xuana:wintr" still finds xauna:winter.
+    private static Choice ResolveVariant(string baseInput, string variantInput, IList<Choice> choices, out string error)
+    {
+        List<Choice> bases = choices.SelectMany(c => c.Variants.Select(v => v.Base))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Select(b => new Choice(b))
+            .ToList();
+        if (bases.Count == 0)
+        {
+            error = "No map has variants.";
+            return null;
+        }
+        Choice chosenBase = Resolve(baseInput, bases, out error);
+        if (chosenBase == null)
+        {
+            return null;
+        }
+        List<Choice> variants = choices
+            .Select(c => new Choice(c.Id, c.Variants.Where(v => v.Base.Equals(chosenBase.Id, StringComparison.OrdinalIgnoreCase)).Select(v => v.Variant).ToArray()))
+            .Where(c => c.Names.Count > 0)
+            .ToList();
+        Choice chosen = Resolve(variantInput, variants, out error);
+        if (chosen == null)
+        {
+            error = chosenBase.Id + " variants: " + string.Join(", ", variants.Select(v => v.Names[0])) + ".";
+            return null;
+        }
+        return choices.First(c => c.Id == chosen.Id);
     }
 
     private static string Describe(List<Choice> choices)

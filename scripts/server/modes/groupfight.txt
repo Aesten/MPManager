@@ -8,7 +8,6 @@ bots = no
 # Options for the next mission when switching to this mode (same lines as a server config).
 CultureTeam1 vlandia
 CultureTeam2 vlandia
-MaxNumberOfPlayers 50
 RoundTotal 19
 RoundTimeLimit 420
 RoundPreparationTimeLimit 12

@@ -18,15 +18,13 @@ namespace MPManager;
 //   command changes them, the next-map options are the current mission's, so the same mission is played again.
 // - Endless: the rotation is switched on if the config didn't, and never runs out (vanilla shuts the server down
 //   after set_automated_battle_count battles).
-// - Short waits: 5 s of scoreboard after a mission that ends by itself instead of 15 (clients still count down
-//   from 15 and are moved on early), none after one ended by a command, and 1 s before the next mission instead
-//   of 10. The intermission itself can't be skipped: the next mission can only be started from there
+// - Short waits (settings.txt, see Settings): 5 s of scoreboard after a mission that ends by itself instead of 15
+//   (clients still count down from 15 and are moved on early), none after one ended by a command, and 1 s before
+//   the next mission instead of 10. The intermission itself can't be skipped: the next mission can only be started from there
 //   (ServerSideIntermissionManager.StartMissionAux), and starting it too early leaves the rotation waiting forever.
 // - Infinite warmup: every mission's warmup lasts until !endwarmup, with its countdown frozen.
 internal static class MissionFlow
 {
-    private const float PostMatchSeconds = 5f;
-    private const float IntermissionSeconds = 1f;
     private const double WarmupFreezeIntervalSeconds = 0.5;
 
     private const BindingFlags Instance = BindingFlags.Instance | BindingFlags.NonPublic;
@@ -39,6 +37,8 @@ internal static class MissionFlow
     private static readonly FieldInfo WarmupStartTimeField = typeof(MultiplayerWarmupComponent).GetField("_currentStateStartTime", Instance);
 
     private static Mission _postMatchShortened;
+    private static Mission _optionsSynced;
+    private static bool _intermissionSynced;
     private static bool _rotationLogged;
 
     // The mission whose warmup !endwarmup ended; every other mission's warmup is infinite.
@@ -55,8 +55,24 @@ internal static class MissionFlow
             KeepRotationGoing(manager);
         }
         Mission mission = Mission.Current;
+        // Between missions the current options are already the next mission's; send them now, so clients have them
+        // when they set the mission up (the client reads SingleSpawn to pick Battle or Skirmish class prices).
+        if (mission == null && manager?.AutomatedBattleState == AutomatedBattleState.CountingForNextBattle && !_intermissionSynced)
+        {
+            _intermissionSynced = true;
+            SyncOptions();
+        }
+        else if (mission != null)
+        {
+            _intermissionSynced = false;
+        }
         if (mission != null)
         {
+            if (_optionsSynced != mission)
+            {
+                _optionsSynced = mission;
+                SyncOptions();
+            }
             ShortenPostMatch(mission);
             if (mission != _warmupEnded)
             {
@@ -72,9 +88,10 @@ internal static class MissionFlow
         voting.IsCultureVoteEnabled = false;
         voting.IsMapSelectedByAdmin = true;
 
-        if (WaitTimeField != null && (float)WaitTimeField.GetValue(manager) > IntermissionSeconds)
+        float intermission = Settings.IntermissionSeconds;
+        if (WaitTimeField != null && (float)WaitTimeField.GetValue(manager) != intermission)
         {
-            WaitTimeField.SetValue(manager, IntermissionSeconds);
+            WaitTimeField.SetValue(manager, intermission);
         }
 
         if (GameStartedField == null || !(bool)GameStartedField.GetValue(manager))
@@ -113,9 +130,10 @@ internal static class MissionFlow
         MultiplayerTimerComponent timer = mission.GetMissionBehavior<MultiplayerTimerComponent>();
         if (lobby?.CurrentMultiplayerState == MissionLobbyComponent.MultiplayerGameState.Ending && timer != null)
         {
-            if (timer.GetRemainingTime(isSynched: false) > PostMatchSeconds)
+            float postMatch = Settings.PostMatchSeconds;
+            if (timer.GetRemainingTime(isSynched: false) > postMatch)
             {
-                timer.StartTimerAsServer(PostMatchSeconds);
+                timer.StartTimerAsServer(postMatch);
             }
             _postMatchShortened = mission;
         }
@@ -330,6 +348,39 @@ internal static class MissionFlow
         }
         RemoveExtraBots(mission, TaleWorlds.Core.BattleSideEnum.Attacker, team1);
         RemoveExtraBots(mission, TaleWorlds.Core.BattleSideEnum.Defender, team2);
+        SyncOptions();
+        RefreshBotRows(mission);
+    }
+
+    // Sends the current options to clients. Clients show a team's bot row on the scoreboard by their own copy of
+    // NumberOfBotsTeam1/2, which the game only resends on joining and after a vote; with votes off, a mode without
+    // bots kept showing the previous mode's bot rows.
+    private static void SyncOptions()
+    {
+        GameNetwork.BeginBroadcastModuleEvent();
+        GameNetwork.WriteMessage(new MultiplayerOptionsImmediate());
+        GameNetwork.EndBroadcastModuleEvent(GameNetwork.EventBroadcastFlags.IncludeUnsynchronizedClients);
+    }
+
+    // Clients only re-check whether to show a bot row when bot scores arrive, so resend them (after SyncOptions).
+    private static void RefreshBotRows(Mission mission)
+    {
+        MissionScoreboardComponent scoreboard = mission.GetMissionBehavior<MissionScoreboardComponent>();
+        if (scoreboard == null)
+        {
+            return;
+        }
+        foreach (MissionScoreboardComponent.MissionScoreboardSide side in scoreboard.Sides)
+        {
+            TaleWorlds.MountAndBlade.BotData bots = side?.BotScores;
+            if (bots == null)
+            {
+                continue;
+            }
+            GameNetwork.BeginBroadcastModuleEvent();
+            GameNetwork.WriteMessage(new NetworkMessages.FromServer.BotData(side.Side, bots.KillCount, bots.AssistCount, bots.DeathCount, bots.AliveCount));
+            GameNetwork.EndBroadcastModuleEvent(GameNetwork.EventBroadcastFlags.None);
+        }
     }
 
     public static int CountBots(TaleWorlds.Core.BattleSideEnum side)
@@ -356,11 +407,20 @@ internal static class MissionFlow
         }
     }
 
+    // The main cultures, each also named by its first letter when no other culture shares it ("v" is Vlandia,
+    // "s" Sturgia: an exact name, where a substring "s" would also match aserai).
     public static List<Choice> Cultures()
     {
-        return MBObjectManager.Instance.GetObjectTypeList<BasicCultureObject>()
-            .Where(c => c.IsMainCulture)
-            .Select(c => new Choice(c.StringId, c.Name?.ToString()))
+        List<BasicCultureObject> cultures = MBObjectManager.Instance.GetObjectTypeList<BasicCultureObject>()
+            .Where(c => c.IsMainCulture && !string.IsNullOrEmpty(c.StringId))
+            .ToList();
+        return cultures
+            .Select(c =>
+            {
+                string letter = c.StringId.Substring(0, 1);
+                bool unique = cultures.Count(o => o.StringId.StartsWith(letter, StringComparison.OrdinalIgnoreCase)) == 1;
+                return unique ? new Choice(c.StringId, c.Name?.ToString(), letter) : new Choice(c.StringId, c.Name?.ToString());
+            })
             .ToList();
     }
 }

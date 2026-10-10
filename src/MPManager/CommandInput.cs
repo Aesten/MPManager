@@ -73,11 +73,37 @@ internal static class CommandInput
             try
             {
                 GameNetwork.HandleConsoleCommand(command);
+                KeepForNextMissions(command);
             }
             catch (Exception e)
             {
                 MPManagerSubModule.Log("Command failed: " + e);
             }
+        }
+    }
+
+    // The console sets an option for the current mission only, and each mission starts from the next-map options,
+    // so the change was undone at the next map. Copy it there too.
+    private static void KeepForNextMissions(string command)
+    {
+        string name = command.Split(' ')[0];
+        if (!MultiplayerOptions.TryGetOptionTypeFromString(name, out var option, out var property))
+        {
+            return;
+        }
+        var current = MultiplayerOptions.MultiplayerOptionsAccessMode.CurrentMapOptions;
+        var next = MultiplayerOptions.MultiplayerOptionsAccessMode.NextMapOptions;
+        switch (property.OptionValueType)
+        {
+        case MultiplayerOptions.OptionValueType.String:
+            option.SetValue(option.GetStrValue(current), next);
+            break;
+        case MultiplayerOptions.OptionValueType.Bool:
+            option.SetValue(option.GetBoolValue(current), next);
+            break;
+        default:
+            option.SetValue(option.GetIntValue(current), next);
+            break;
         }
     }
 }

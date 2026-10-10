@@ -1,6 +1,52 @@
-# MPManager map names: <name> = <map id>
-# "lighthouse = mp_bnl_lighthouse" makes !setmap lighthouse (and close misspellings) pick mp_bnl_lighthouse,
-# and !maps shows it as "lighthouse (mp_bnl_lighthouse)". A map can have several names; the first is shown.
-# Maps without a name are shown and matched by their id. A map named here is offered in every mode.
+# MPManager map names, one line per map:  <map id> | <display name> | <aliases> | <short aliases>
+# - display name: how chat shows the map ("Switching to Xauna."); may contain spaces.
+# - aliases, short aliases: what !setmap and !mode match, separated by spaces, typed without spaces (close
+#   misspellings work too). An exact alias always wins, so short ones can be as short as you like ("x", "to").
+# - variants: name a map's other versions "base:variant" (xauna:winter, x:w). "xauna" alone picks the map with
+#   the plain alias xauna, so give that alias to the version you want as default. Both halves are matched
+#   loosely ("xauna:wint"); "xauna:" with an unknown variant lists the variants. A short variant needs its own
+#   entry ("to:w" on the winter map), since the "to" before the colon is matched among variant names only.
+# Maps without a display name or alias are shown and matched by their id.
+# Which maps a mode offers is set in its mode file (scripts/server/modes/), not here.
 # Edit here and run scripts/deploy.sh; the server picks up changes without a restart
 # (it re-reads ~/bannerlord/maps.txt when it changes).
+
+# Skirmish: official maps
+mp_skirmish_map_002f         | Town Outskirts            | townoutskirts            | to
+mp_skirmish_map_002_winter   | Town Outskirts (Winter)   | townoutskirts:winter     | to:w
+mp_skirmish_map_003_skinc    | Trading Post              | tradingpost              | tp
+mp_skirmish_map_007          | Xauna (Rain)              | xauna:rain               | x:r
+mp_skirmish_map_007_winter   | Xauna (Winter)            | xauna:winter             | x:w
+mp_skirmish_map_008_skin     | Port at Omor (Cloudy)     | portatomor:cloudy        | pao:c
+mp_skirmish_map_009          | Zendyar                   | zendyar                  | zy
+mp_skirmish_map_010          | Echerion                  | echerion                 | ec
+mp_skirmish_map_010_winter   | Echerion (Winter)         | echerion:winter          | ec:w
+mp_skirmish_map_014          | Urikskalaar               | urikskalaar              | uk
+mp_skirmish_map_020          | Sharis                    | sharis                   | sh
+
+# Skirmish: custom maps
+mm_mp_skirmish_map_007_sunny | Xauna                     | xauna                    | x
+mp_bnl_abandoned_v2          | Abandoned                 | abandoned                | ab
+mp_bnl_fortofhonour          | Fort of Honor             | fortofhonor              | foh
+mp_bnl_ghosttown             | Ghost Town                | ghosttown                | gt
+mp_bnl_lakeside              | Lakeside                  | lakeside                 | ls
+mp_bnl_lighthouse            | Lighthouse                | lighthouse               | lh
+mp_bnl_lycaronsdistricts     | Lycaron's Districts       | lycaronsdistricts        | ld
+mp_bnl_purplehaze            | Purple Haze               | purplehaze               | ph
+mp_bnl_quarry                | Quarry                    | quarry                   | q
+mp_bnl_vatnborg              | Vatnborg                  | vatnborg                 | vb
+mp_portomor                  | Port at Omor              | portatomor               | pao
+mp_skirmish_montverd         | Montverd                  | montverd                 | mv
+
+# Groupfight
+mp_groupfight                | Groupfight                | groupfight               | gf
+mp_ie_performancearena       | Performance Arena         | performancearena         | pa
+
+# Team deathmatch
+mp_tdm_map_001               | Harbor of Ovsk (Winter)   | harborofovsk:winter      | ho:w
+mp_tdm_map_001_spring        | Harbor of Ovsk            | harborofovsk             | ho
+mp_tdm_map_003               | Tsagaan Castle            | tsagaancastle            | tc
+mp_tdm_map_004               | Nord Town (Old)           | nordtown:old             | nt:o
+mp_tdm_map_004a              | Nord Town                 | nordtown                 | nt
+mp_tdm_map_004a_w            | Nord Town (Winter)        | nordtown:winter          | nt:w
+mp_tdm_map_004a_winter       | Nord Town (Christmas)     | nordtown:christmas       | nt:c
