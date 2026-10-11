@@ -23,7 +23,7 @@ chat off until `/a` or `/t`). `/` is accepted from `mpm cmd`.
 | `!bots [team1 team2]` | | admin | Shows or sets the bots per team, e.g. `!bots 0 10`. Only in modes with bots (`tdm`); lowering removes bots at once. |
 | `!warmup` | `!wu` | admin | Back to warmup: cancels an ending warmup, or restarts the mission if the match has started. |
 | `!endwarmup [--force]` | `!ew`, `!ewf` (= `--force`) | admin | Ends this mission's warmup with the game's 30 s countdown, or with `--force` the 3 s "battle starting" one. |
-| `!kick <player> [--confirm]` | | admin | Kicks the closest-named player after `!confirm` (within 30 s), or at once with `--confirm`. |
+| `!kick <player> [--confirm]` | `!kc` (= `--confirm`) | admin | Kicks the closest-named player after `!confirm` (within 30 s), or at once with `--confirm`. |
 | `!confirm` | | admin | Confirms a pending `!kick`. |
 | `!tp <player> [to-player]` | | admin | Moves a player (with their horse) to just behind another player: `!tp p1 p2`; `!tp p2` moves you. Both must be alive. |
 | `!kill [player]` | | admin | Kills you, or the closest-named player (the same death as staying out of the map's boundary). |
