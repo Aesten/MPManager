@@ -32,7 +32,7 @@ internal static class ReadyCheck
             if (DateTime.UtcNow > Ready[side].At.AddSeconds(ReadyWindowSeconds))
             {
                 Ready.Remove(side);
-                ServerChat.Broadcast(SideName(side) + " are no longer ready (nobody on the other team readied within " + ReadyWindowSeconds + " s).");
+                ServerChat.Broadcast(SideName(side) + ": ready expired.");
             }
         }
     }
@@ -69,7 +69,7 @@ internal static class ReadyCheck
             }
             _countdownStartedByReady = null;
             MissionFlow.StartHeldWarmup();
-            ServerChat.Broadcast(peer.UserName + ": " + SideName(side) + " are not ready after all. Back to warmup; !ready again when set.");
+            ServerChat.Broadcast(peer.UserName + ": " + SideName(side) + " not ready. Back to warmup.");
             return null;
         }
         if (warmup != MissionFlow.WarmupStatus.Infinite)
@@ -83,7 +83,7 @@ internal static class ReadyCheck
             {
                 return SideName(side) + " aren't ready.";
             }
-            ServerChat.Broadcast(peer.UserName + ": " + SideName(side) + " are not ready after all.");
+            ServerChat.Broadcast(peer.UserName + ": " + SideName(side) + " not ready.");
             return null;
         }
 
@@ -92,11 +92,10 @@ internal static class ReadyCheck
         {
             Ready.Clear();
             _countdownStartedByReady = Mission.Current;
-            ServerChat.Broadcast(peer.UserName + ": " + SideName(side) + " are ready too. " + MissionFlow.EndWarmup(force: false, out _)
-                + " Changed your mind? !notready cancels the countdown.");
+            ServerChat.Broadcast(peer.UserName + ": " + SideName(side) + " ready. " + MissionFlow.EndWarmup(force: false, out _));
             return null;
         }
-        ServerChat.Broadcast(peer.UserName + ": " + SideName(side) + " are ready. " + SideName(other) + ": type !ready within " + ReadyWindowSeconds + " s to start.");
+        ServerChat.Broadcast(peer.UserName + ": " + SideName(side) + " ready. " + SideName(other) + ": !ready within " + ReadyWindowSeconds + " s.");
         return null;
     }
 
