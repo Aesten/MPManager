@@ -9,9 +9,11 @@ at runtime) is in `../BannerlordDecompiled/notes/dedicated-server-runtime.md`.
 
 ## What it does
 
-**Chat commands.** Messages starting with `!` or `/` are never shown in chat; the server handles them and
+**Chat commands.** Messages starting with `!` are never shown in chat; the server handles them and
 answers privately, and changes are announced to everyone. Admin commands need the server's admin password
-(join with it); `mpm cmd` on the server counts as an admin.
+(join with it); `mpm cmd` on the server counts as an admin. In game only `!` works: the game client keeps
+every message starting with `/` to itself (its own `/a`, `/t`, `/ab`, `/ac`; anything else is dropped and turns
+chat off until `/a` or `/t`). `/` is accepted from `mpm cmd`.
 
 | Command | Aliases | Who | Effect |
 |---|---|---|---|
@@ -32,7 +34,7 @@ answers privately, and changes are announced to everyone. Admin commands need th
 | `!help [command]` | | everyone | Lists the commands, one per line with their aliases; `!help <command>` shows its usage and description. |
 
 Other mods' commands are hidden from chat the same way. Mods that register with MPManager (MPBalancer's `!b`,
-see below) also get the `/` prefix, aliases, `!help` and `mpm cmd`; others still receive their commands
+see below) also get aliases, `!help` and `mpm cmd`; others still receive their commands
 through their own chat hook.
 
 **Commands from other mods.** A server mod can route its chat commands through MPManager without
@@ -214,6 +216,7 @@ helper sends them to players who don't have them. The server only sees new maps 
 ./run-server.sh -d               # start detached
 ./run-server.sh --vanilla        # without MPBalancer, for A/B comparisons
 ./run-server.sh --no-manager     # without MPManager
+./run-server.sh --no-stats       # without MPStats (loaded when installed, like MPManager)
 ./run-server.sh --config x.txt   # config file in ~/bannerlord/configs/, or a path (default: base-config.txt)
 ./run-server.sh --tickrate 60    # server tick rate in Hz (default: 140)
 ./run-server.sh --stop           # stop the server and wait for it to exit

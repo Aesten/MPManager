@@ -11,7 +11,7 @@ using TaleWorlds.MountAndBlade.Diamond;
 
 namespace MPManager;
 
-// Chat commands ("!setmap lighthouse vla stur", or with "/"), from players in chat and from the control socket
+// Chat commands ("!setmap lighthouse vla stur"; "/" only from the socket, clients never send it), from players in chat and from the control socket
 // (mpm cmd /setmap lighthouse). They are never shown in chat (see ChatInterceptor). Commands that change the
 // server are for admins (players who joined with the admin password); the socket (mpm cmd) counts as an admin.
 //

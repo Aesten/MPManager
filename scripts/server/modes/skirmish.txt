@@ -16,6 +16,7 @@ CultureTeam1 vlandia
 CultureTeam2 battania
 RoundTotal 5
 RoundTimeLimit 420
+# Class selection time before each round. 3 s at the least: at 2 (the game's minimum), players often can't move after spawning.
 RoundPreparationTimeLimit 12
 UnlimitedGold False
 AutoTeamBalanceThreshold 0

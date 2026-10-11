@@ -10,7 +10,8 @@ CultureTeam1 vlandia
 CultureTeam2 vlandia
 RoundTotal 19
 RoundTimeLimit 420
-RoundPreparationTimeLimit 12
+# Class selection time before each round. 3 s at the least: at 2 (the game's minimum), players often can't move after spawning.
+RoundPreparationTimeLimit 5
 UnlimitedGold True
 SingleSpawn True
 AutoTeamBalanceThreshold 0

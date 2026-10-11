@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
-# Starts the Bannerlord Dedicated Server (Linux) with MPBalancer and MPManager inside a screen session.
-# MPManager is added to the module list when it's installed (Modules/MPManager); MPBalancer is required
-# unless --vanilla is given.
+# Starts the Bannerlord Dedicated Server (Linux) with MPBalancer, MPManager and MPStats inside a screen session.
+# MPManager and MPStats are added to the module list when they're installed (Modules/MPManager, Modules/MPStats);
+# MPBalancer is required unless --vanilla is given.
 # Lives next to token.txt on the server (~/bannerlord/); mpManager's scripts/deploy.sh copies it there.
 #
-# Usage: run-server.sh [-d] [--vanilla] [--no-manager] [--config <file>] [--tickrate <n>]
+# Usage: run-server.sh [-d] [--vanilla] [--no-manager] [--no-stats] [--config <file>] [--tickrate <n>]
 #        run-server.sh --stop
 #   -d, --detach     start the screen session detached (for use over ssh)
 #   --vanilla        start without MPBalancer, for A/B comparisons
 #   --no-manager     start without MPManager
+#   --no-stats       start without MPStats
 #   --config <file>  server config, in ~/bannerlord/configs/ or a path (default: base-config.txt)
 #   --tickrate <n>   server tick rate in Hz (default: 140)
 #   --stop           stop a running server and wait for it to exit
@@ -39,6 +40,7 @@ TICKRATE=140
 
 VANILLA=0
 MANAGER=1
+STATS=1
 CONFIG="base-config.txt"
 CONFIG_DIR="$SCRIPT_DIR/configs"
 DETACH=0
@@ -54,6 +56,7 @@ while [ $# -gt 0 ]; do
     -d|--detach) DETACH=1 ;;
     --vanilla) VANILLA=1 ;;
     --no-manager) MANAGER=0 ;;
+    --no-stats) STATS=0 ;;
     --config) CONFIG="${2:?--config needs a file name}"; shift ;;
     --tickrate) TICKRATE="${2:?--tickrate needs a number}"; shift ;;
     --stop) STOP=1 ;;
@@ -68,6 +71,8 @@ MANAGER_DLL="$DS_DIR/Modules/MPManager/bin/Linux64_Shipping_Server/MPManager.dll
 MODULES="Native*Multiplayer"
 [ "$VANILLA" = 0 ] && MODULES="$MODULES*MPBalancer"
 [ "$MANAGER" = 1 ] && [ -f "$MANAGER_DLL" ] && MODULES="$MODULES*MPManager"
+STATS_DLL="$DS_DIR/Modules/MPStats/bin/Linux64_Shipping_Server/MPStats.dll"
+[ "$STATS" = 1 ] && [ -f "$STATS_DLL" ] && MODULES="$MODULES*MPStats"
 
 session_running () {
   screen -ls "$SESSION" 2>/dev/null | grep -q "[0-9]\.$SESSION[[:space:]]"
@@ -113,7 +118,7 @@ if [ "$INNER" = 1 ]; then
   export MPM_SETTINGS_FILE="$SCRIPT_DIR/settings.txt"
   # Server and per-player performance numbers, a pair of CSV files per run (see Metrics.cs, mpm perf).
   export MPM_METRICS_DIR="$SCRIPT_DIR/metrics"
-  # MPBalancer's hit and bump CSVs go with the metrics (same retention).
+  # MPBalancer's hit CSVs go with the metrics (same retention).
   export MPB_DATA_DIR="$SCRIPT_DIR/metrics"
   exec dotnet TaleWorlds.Starter.DotNetCore.Linux.dll \
     "_MODULES_*${MODULES}*_MODULES_" \
@@ -151,6 +156,7 @@ sed -E "s/^(ServerName[[:space:]]+.*[^[:space:]])[[:space:]]*\$/\1 $STARTED/" \
 INNER_ARGS=(--inner --config "$RUN_CONFIG" --tickrate "$TICKRATE")
 [ "$VANILLA" = 1 ] && INNER_ARGS+=(--vanilla)
 [ "$MANAGER" = 0 ] && INNER_ARGS+=(--no-manager)
+[ "$STATS" = 0 ] && INNER_ARGS+=(--no-stats)
 
 # Keep previous logs (named after their last write time) instead of overwriting them, gzipped; logs and metrics
 # older than KEEP_DAYS are deleted. Metrics files are named after their run's start; the ones there now are from

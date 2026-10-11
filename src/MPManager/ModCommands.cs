@@ -5,7 +5,7 @@ using TaleWorlds.MountAndBlade;
 
 namespace MPManager;
 
-// Chat commands of other mods, routed through MPManager: they get the "!"/"/" prefixes, hiding from chat, aliases,
+// Chat commands of other mods, routed through MPManager: they get hiding from chat, aliases,
 // the admin check and !help like MPManager's own. A mod stays standalone without MPManager; with it, it registers
 // here and turns its own chat hook off.
 //

@@ -1,8 +1,8 @@
 // Optional link from a server mod to MPManager, for routing the mod's chat commands through it. Copy this file
 // into the mod and change the namespace; the mod needs no reference to MPManager and still works without it.
 //
-// With MPManager on the server, the mod's commands get MPManager's handling: "!" and "/" prefixes, hidden from
-// chat, command aliases (aliases.txt), the admin check, and a line in !help. Without it, the mod keeps using its
+// With MPManager on the server, the mod's commands get MPManager's handling: hidden from chat,
+// command aliases (aliases.txt), the admin check, and a line in !help. Without it, the mod keeps using its
 // own chat hook.
 //
 // Usage, when the mod would attach its own chat hook (e.g. once per mission):

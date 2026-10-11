@@ -8,7 +8,8 @@ using TaleWorlds.MountAndBlade.Network.Messages;
 
 namespace MPManager;
 
-// Keeps chat commands (messages starting with "!" or "/") out of chat.
+// Keeps chat commands (messages starting with "!") out of chat. "/" is checked too, but game clients never send
+// those: their chat box handles "/" messages itself (MPChatVM.ExecuteSendMessage).
 //
 // ChatBox broadcasts every message from its handlers for the client chat messages (PlayerMessageAll,
 // PlayerMessageTeam). Its OnMessageReceivedAtDedicatedServer hook can observe a message but not stop it. So we
