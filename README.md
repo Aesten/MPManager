@@ -33,7 +33,7 @@ chat off until `/a` or `/t`). `/` is accepted from `mpm cmd`.
 | `!maps` | | everyone | Numbered list of the maps for the current mode, one line per map with its variants in brackets: `1. Xauna [default\|rain\|winter]`. A number picks that map's default version (`!setmap 1`). |
 | `!help [command]` | | everyone | Lists the commands, one per line with their aliases; `!help <command>` shows its usage and description. |
 
-Other mods' commands are hidden from chat the same way. Mods that register with MPManager (MPBalancer's `!b`,
+Other mods' commands are hidden from chat the same way. Mods that register with MPManager (MPBalancer's `!b`, MPStats' `!stats`,
 see below) also get aliases, `!help` and `mpm cmd`; others still receive their commands
 through their own chat hook.
 
@@ -185,9 +185,11 @@ An option set with `mpm cmd` is also kept for later missions (the console alone 
 `~/bannerlord/metrics/server-<start>.csv`, with the players and agents on the server, the tick rate actually
 reached against the `/tickrate` target, tick-to-tick times (average, median, 99th percentile, worst), the share
 of late ticks (over 1.5x the target interval, felt as stutter), CPU in % of one core, memory, .NET heap, full
-garbage collections and threads. `players-<start>.csv` has one row per player per 10 s: the game's averaged
-ping (min, max, and its standard deviation as jitter) and packet loss. Earlier runs' files are gzipped and kept 30 days. Columns are
-described in `src/MPManager/Metrics.cs`. Network bandwidth per server can't be told apart from inside one
+garbage collections and threads. `players-<start>.csv` has one row per player per 10 s: the player's platform id
+(`2.0.0.<steam id>`, as in MPStats' match records, so the two can be matched), name, the game's averaged ping
+(min, max, and its standard deviation as jitter) and packet loss. Metrics go only to these files, never to the
+server log. Earlier runs' files are gzipped and kept 30 days. Columns are described in
+`src/MPManager/Metrics.cs`. Network bandwidth per server can't be told apart from inside one
 process on a shared host; under Docker it's per container.
 
 ## Test server

@@ -25,8 +25,10 @@ namespace MPManager;
 //                   process memory (working set), .NET heap, and full garbage collections in the window
 //   threads         process threads
 //
-// and one row per connected player to MPM_METRICS_DIR/players-<start>.csv: ping (the game's averaged ping, sampled
-// every second), its min, max and standard deviation over the window (jitter), and packet loss.
+// and one row per connected player to MPM_METRICS_DIR/players-<start>.csv: the player's platform id ("2.0.0.<steam
+// id>", the same as in MPStats' match records, stable across name changes) and name, ping (the game's averaged
+// ping, sampled every second), its min, max and standard deviation over the window (jitter), and packet loss.
+// Nothing of this goes to the server log.
 internal static class Metrics
 {
     private const double WindowSeconds = 10;
@@ -92,7 +94,7 @@ internal static class Metrics
         _server = new StreamWriter(Path.Combine(dir, "server-" + start + ".csv")) { AutoFlush = true };
         _server.WriteLine("time,players,agents,state,target_hz,hz,tick_avg_ms,tick_p50_ms,tick_p99_ms,tick_max_ms,late_pct,cpu_pct,mem_mb,heap_mb,gc_gen2,threads");
         _players = new StreamWriter(Path.Combine(dir, "players-" + start + ".csv")) { AutoFlush = true };
-        _players.WriteLine("time,player,ping_avg_ms,ping_min_ms,ping_max_ms,ping_jitter_ms,loss_pct");
+        _players.WriteLine("time,player_id,player,ping_avg_ms,ping_min_ms,ping_max_ms,ping_jitter_ms,loss_pct");
         _targetHz = ReadTickRate();
         _windowStartMs = Clock.Elapsed.TotalMilliseconds;
         _cpuAtWindowStart = Process.GetCurrentProcess().TotalProcessorTime;
@@ -176,7 +178,7 @@ internal static class Metrics
             double avg = samples.Average();
             double jitter = Math.Sqrt(samples.Sum(s => (s - avg) * (s - avg)) / samples.Count);
             string loss = peer.IsConnectionActive ? F(peer.AverageLossPercent) : "";
-            _players.WriteLine(string.Join(",", time, Csv(peer.UserName), F(avg), F(samples.Min()), F(samples.Max()), F(jitter), loss));
+            _players.WriteLine(string.Join(",", time, peer.VirtualPlayer?.Id.ToString() ?? "", Csv(peer.UserName), F(avg), F(samples.Min()), F(samples.Max()), F(jitter), loss));
         }
 
         PingSamples.Clear();
