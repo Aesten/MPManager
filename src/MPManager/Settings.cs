@@ -6,7 +6,7 @@ using System.IO;
 namespace MPManager;
 
 // Server settings that can change without a restart, from MPM_SETTINGS_FILE (~/bannerlord/settings.txt, from
-// scripts/server/settings.txt), re-read when it changes. Lines are "name = value"; missing or invalid values use
+// mpServerConfig/server/settings.txt), re-read when it changes. Lines are "name = value"; missing or invalid values use
 // the defaults below.
 internal static class Settings
 {

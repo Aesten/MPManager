@@ -6,7 +6,7 @@ using TaleWorlds.MountAndBlade;
 
 namespace MPManager;
 
-// Server modes (!mode), one file each in MPM_MODES_DIR (~/bannerlord/modes/, from scripts/server/modes/), re-read
+// Server modes (!mode), one file each in MPM_MODES_DIR (~/bannerlord/modes/, from mpServerConfig/server/modes/), re-read
 // when a file changes. The file name is the mode's name. A file holds settings ("key = value") and option lines
 // ("Option value", like a server config) applied to the next mission when switching to the mode:
 //

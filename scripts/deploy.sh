@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Builds MPManager and installs it on the test server, along with everything in scripts/server/ (run-server.sh,
-# mpm, aliases.txt, maps.txt, modes/) in ~/bannerlord/. mpm is linked as ~/.local/bin/mpm, so it's on the PATH there.
-# Custom maps are installed separately, by scripts/deploy-maps.sh.
+# Builds MPManager and installs it on the test server, along with its tooling in scripts/server/ (mpm) in
+# ~/bannerlord/. mpm is linked as ~/.local/bin/mpm, so it's on the PATH there.
+# The server's configuration (run-server.sh, settings, aliases, maps, modes, configs) and custom maps are installed
+# from the sibling mpServerConfig repo (deploy.sh, deploy-maps.sh).
 #
 # Usage: scripts/deploy.sh [--no-build] [--restart [-- <run-server.sh options>]]
 #   --no-build  copy the existing dist/ output without rebuilding
@@ -50,7 +51,7 @@ for script in "$REPO_ROOT"/scripts/server/*; do
   name="$(basename "$script")"
   echo "Installing $name to $HOST:~/$REMOTE_SCRIPTS/"
   if [ -d "$script" ]; then
-    # A folder (modes/) replaces the one on the server as a whole.
+    # A folder replaces the one on the server as a whole.
     tar -C "$REPO_ROOT/scripts/server" -cf - "$name" \
       | ssh "$HOST" "mkdir -p \"\$HOME/$REMOTE_SCRIPTS\" && cd \"\$HOME/$REMOTE_SCRIPTS\" && rm -rf \"$name\" && tar -xf -"
     continue

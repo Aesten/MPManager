@@ -30,7 +30,8 @@ time each mod's tick and event handlers with a Stopwatch and add their totals to
 
 **Make MPManager work without our launcher (do this first).** MPManager finds every file it uses (modes,
 maps.txt, aliases.txt, settings.txt, its log, metrics, the control socket) through environment variables set by
-`scripts/server/run-server.sh`. A server owner who just installs the module gets almost nothing. Instead:
+our launcher (`run-server.sh`, in the mpServerConfig repo). A server owner who just installs the module gets
+almost nothing. Instead:
 
 - default to a folder that ships with the module (e.g. `Modules/MPManager/config/` for modes, maps, aliases,
   settings; logs, metrics and the socket in a writable folder such as `Modules/MPManager/data/`), and keep the

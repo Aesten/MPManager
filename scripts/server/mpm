@@ -10,7 +10,7 @@
 #   start [options]      start the server in the background; options go to run-server.sh
 #   stop | restart | status
 #
-# Lives in ~/bannerlord/ next to run-server.sh, linked as ~/.local/bin/mpm; mpManager's scripts/deploy.sh
+# Lives in ~/bannerlord/ next to run-server.sh, linked as ~/.local/bin/mpm; mpManager's scripts/deploy.sh (run-server.sh: mpServerConfig's deploy.sh)
 # installs both. Commands go to MPManager's control socket (control.sock), which answers them; the server's
 # own console input doesn't work on Linux. Logs come from mpmanager.log, which MPManager writes as lines are
 # printed; server.log is screen's raw copy of the console, for anything missing there.

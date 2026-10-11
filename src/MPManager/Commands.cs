@@ -15,7 +15,7 @@ namespace MPManager;
 // (mpm cmd /setmap lighthouse). They are never shown in chat (see ChatInterceptor). Commands that change the
 // server are for admins (players who joined with the admin password); the socket (mpm cmd) counts as an admin.
 //
-// Aliases come from MPM_ALIASES_FILE (~/bannerlord/aliases.txt, from scripts/server/aliases.txt), re-read when it
+// Aliases come from MPM_ALIASES_FILE (~/bannerlord/aliases.txt, from mpServerConfig/server/aliases.txt), re-read when it
 // changes: "sm = setmap" makes "!sm lighthouse" run "!setmap lighthouse"; an alias can include arguments
 // ("ewf = endwarmup --force"), and anything typed after it is appended.
 internal static class Commands
@@ -345,7 +345,7 @@ internal static class Commands
         Choice choice = Matcher.Resolve(args[0], modes.Select(m => m.ToChoice()).ToList(), out string error);
         if (choice == null)
         {
-            caller.Reply(modes.Count == 0 ? "No modes are set up (scripts/server/modes/)." : error);
+            caller.Reply(modes.Count == 0 ? "No modes are set up (mpServerConfig/server/modes/)." : error);
             return;
         }
         Mode mode = modes.First(m => m.Name == choice.Id);

@@ -5,7 +5,7 @@ using System.Linq;
 
 namespace MPManager;
 
-// Names for maps, from MPM_MAP_NAMES_FILE (~/bannerlord/maps.txt, from scripts/server/maps.txt), re-read when it
+// Names for maps, from MPM_MAP_NAMES_FILE (~/bannerlord/maps.txt, from mpServerConfig/server/maps.txt), re-read when it
 // changes. Lines are "map id | display name | aliases | short aliases": the display name is how the map is shown
 // in chat, the aliases and short aliases (separated by spaces) are what !setmap and !mode match. A variant of a map is named "base:variant"
 // (xauna:winter), matched in two parts (see Matcher). Maps without a line are shown and matched by id. Which maps

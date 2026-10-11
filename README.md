@@ -67,16 +67,14 @@ compared with the closest part of the name. When it's ambiguous (`fort`), the ca
 Cultures can also be typed as their first letter: `a` Aserai, `b` Battania, `e` Empire, `k` Khuzait,
 `s` Sturgia, `v` Vlandia.
 
-**Map names** are defined in `scripts/server/maps.txt` (deployed to `~/bannerlord/maps.txt` and re-read when
-it changes, no restart), one line per map: `map id | display name | aliases`. The display name is how chat
+**Map names** are defined in `~/bannerlord/maps.txt` (re-read when it changes, no restart), one line per map: `map id | display name | aliases`. The display name is how chat
 shows the map (`Xauna`, spaces allowed); the aliases, separated by spaces, are what `!setmap` and `!mode`
 match. Other versions of a map are named `base:variant`: with `mp_skirmish_map_007 | Xauna | xauna` and
 `mp_skirmish_map_007_winter | Xauna (Winter) | xauna:winter`, `!setmap xauna` picks the default version and
 `!setmap xauna:winter` (or `x:w`) the winter one; an unknown variant lists the map's variants. Maps without a
 display name or alias are shown and matched by their id. The game's own display names aren't used.
 
-**Modes** are defined in `scripts/server/modes/`, one file per mode (deployed to `~/bannerlord/modes/` and
-re-read when they change, no restart). The file name is the mode's name. A mode file has settings and option
+**Modes** are defined in `~/bannerlord/modes/`, one file per mode (re-read when they change, no restart). The file name is the mode's name. A mode file has settings and option
 lines (like a server config) that are applied to the next mission when switching to the mode:
 
 ```
@@ -114,8 +112,7 @@ missions with nothing loaded (no bots fighting each other), by holding the inter
 someone joins, the next mission starts a second later, in warmup. A fresh server starts in Skirmish warmup and
 goes to standby after 60 s without players.
 
-**Aliases** are defined in `scripts/server/aliases.txt` (deployed to `~/bannerlord/aliases.txt` and re-read
-when it changes, no restart): `sm = setmap` makes `!sm lighthouse` run `!setmap lighthouse`, and an alias
+**Aliases** are defined in `~/bannerlord/aliases.txt` (re-read when it changes, no restart): `sm = setmap` makes `!sm lighthouse` run `!setmap lighthouse`, and an alias
 can carry arguments (`ewf = endwarmup --force`). The Aliases column above lists the defaults from that file;
 update it when the file changes.
 
@@ -132,8 +129,8 @@ be started from there. A switch by command takes about a second on the server, p
 clients. If the config doesn't turn on the automated rotation, MPManager does, and the server never stops
 after a set number of battles.
 
-Both waits are set in `scripts/server/settings.txt` (`intermission_seconds`, `post_match_seconds`; deployed to
-`~/bannerlord/settings.txt` and re-read when it changes, no restart). If players ever crash on map changes,
+Both waits are set in `~/bannerlord/settings.txt` (`intermission_seconds`, `post_match_seconds`; re-read when it
+changes, no restart). If players ever crash on map changes,
 raise `intermission_seconds` first (e.g. to 5): a slow PC may still be unloading the previous map when the
 next one starts. Not seen so far; vanilla waits 10 s and has no setting for it.
 
@@ -195,37 +192,18 @@ process on a shared host; under Docker it's per container.
 
 ## Test server
 
-Same server as mpbalancer (`ssh aesten@7900x`; set `MPM_HOST` to deploy elsewhere):
+Same server as mpBalancer (`ssh aesten@7900x`; set `MPM_HOST` to deploy elsewhere):
 
 ```sh
-scripts/deploy.sh                # build and install the module and scripts/server/ (run-server.sh, mpm, aliases.txt, maps.txt)
+scripts/deploy.sh                # build and install the module and mpm (scripts/server/)
 scripts/deploy.sh --restart      # ...then restart the server
-scripts/deploy-maps.sh [dirs]    # install custom maps (default: the custom maps named in maps.txt)
 ```
 
-`deploy-maps.sh` copies maps into the server's `Modules/Multiplayer/SceneObj`, replacing maps of the same
-name and keeping the rest. By default it installs the custom maps named in `scripts/server/maps.txt`, from
-this PC's game's `Modules/Multiplayer/SceneObj` (where the game keeps maps downloaded from servers); official
-maps in maps.txt ship with the game and are skipped. From the server, the map download
-helper sends them to players who don't have them. The server only sees new maps after a restart.
-
-`deploy.sh` also installs the server launcher, `~/bannerlord/run-server.sh` (source: `scripts/server/run-server.sh`). It starts the server with MPBalancer (installed by mpbalancer's own `deploy.sh`), plus MPManager whenever `Modules/MPManager` is installed:
-
-```sh
-./run-server.sh                  # start in screen session "bannerlord" and attach
-./run-server.sh -d               # start detached
-./run-server.sh --vanilla        # without MPBalancer, for A/B comparisons
-./run-server.sh --no-manager     # without MPManager
-./run-server.sh --no-stats       # without MPStats (loaded when installed, like MPManager)
-./run-server.sh --config x.txt   # config file in ~/bannerlord/configs/, or a path (default: base-config.txt)
-./run-server.sh --tickrate 60    # server tick rate in Hz (default: 140)
-./run-server.sh --stop           # stop the server and wait for it to exit
-```
-
-- It reads the auth token from `token.txt` and `cd`s into `bin/Linux64_Shipping_Server` before starting (that folder's name decides where module DLLs are loaded from).
-- The server name gets the start time (Paris time) appended, e.g. `Neko - 22:32`, so a restarted server can be told apart from the stale entry the server list keeps for a while. The server runs from a copy of the config with that name, `Modules/Native/.run-config.txt`, rewritten at each start; edit `~/bannerlord/configs/base-config.txt`, never the copy.
-- Output goes to `~/bannerlord/server.log`; logs of earlier runs are moved to `~/bannerlord/logs/server-<time>.log.gz` (kept 30 days). The server prints its full command line, auth token included, into its logs, so don't share them.
-- `--stop` sends SIGTERM: the server ignores SIGHUP, so closing the screen session alone leaves it running.
+The server's configuration lives in the sibling **mpServerConfig** repo and is deployed from there: the launcher
+(`~/bannerlord/run-server.sh`: which mods load, where files go, the tick rate), `settings.txt`, `aliases.txt`,
+`maps.txt`, `modes/`, `configs/base-config.txt`, and the custom maps (`deploy-maps.sh`). The examples in this
+README come from those files; that repo's README has the launcher's options. MPManager finds its files through
+the environment variables the launcher sets (`MPM_*`).
 
 ## Planned
 
