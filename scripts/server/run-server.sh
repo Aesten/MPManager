@@ -120,6 +120,8 @@ if [ "$INNER" = 1 ]; then
   export MPM_METRICS_DIR="$SCRIPT_DIR/metrics"
   # MPBalancer's hit CSVs go with the metrics (same retention).
   export MPB_DATA_DIR="$SCRIPT_DIR/metrics"
+  # MPStats' match records, one folder per match; kept until imported (not archived or deleted with the logs).
+  export MPS_DATA_DIR="$SCRIPT_DIR/stats"
   exec dotnet TaleWorlds.Starter.DotNetCore.Linux.dll \
     "_MODULES_*${MODULES}*_MODULES_" \
     /dedicatedcustomserverconfigfile "$CONFIG" \
