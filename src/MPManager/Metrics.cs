@@ -13,8 +13,8 @@ namespace MPManager;
 // MPM_METRICS_DIR/server-<start>.csv:
 //
 //   time            end of the window (UTC)
-//   players         connected players; agents: agents in the mission (players, bots, horses); state: mission
-//                   state (none = between missions or standing by)
+//   players         connected players; agents: agents in the mission (players, bots, horses); state: as in
+//                   mpm status (standby, intermission, warmup, warmup_ending, playing, ending)
 //   target_hz       the /tickrate the server was started with
 //   hz              ticks per second actually reached
 //   tick_avg_ms, tick_p50_ms, tick_p99_ms, tick_max_ms
@@ -147,7 +147,7 @@ internal static class Metrics
         int late = targetMs > 0 ? ticks.Count(t => t > targetMs * LateFactor) : 0;
         int players = Peers.Players().Count;
         Mission mission = Mission.Current;
-        string state = mission?.GetMissionBehavior<MissionLobbyComponent>()?.CurrentMultiplayerState.ToString().ToLowerInvariant() ?? "none";
+        string state = Status.State();
 
         _server.WriteLine(string.Join(",",
             time,

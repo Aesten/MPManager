@@ -36,7 +36,8 @@ internal static class Status
         return JsonSerializer.Serialize(status);
     }
 
-    private static string State()
+    // Also the state column of the server metrics (Metrics), so mpm list shows the same.
+    internal static string State()
     {
         if (Standby.IsStandingBy)
         {

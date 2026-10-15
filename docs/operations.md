@@ -61,7 +61,8 @@ mpm 3 restart --when-empty     # restarts as soon as nobody is on
 mpm all restart --when-empty   # every Playground
 ```
 
-`mpm list` shows "when empty" until it happens; `mpm 3 stop` cancels it by stopping now. Use this after deploying
+Players on the server are told in chat that a restart is scheduled (and nobody gets kicked), and players who
+join before it happens are told on joining. `mpm list` shows "when empty" until it happens; `mpm 3 stop` cancels it by stopping now. Use this after deploying
 a mod, a map, or a change marked "pending" in `mpm list`.
 
 ### Change one server's settings
