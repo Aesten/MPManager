@@ -53,6 +53,9 @@ almost nothing. Instead:
 
 ## Hosting several servers
 
+Decided and partly built: see [fleet.md](fleet.md) (instances 0-10, configuration layers, mpm, the desktop app).
+The notes below are the original exploration.
+
 ### Layout: one install, many instances
 
 Install the dedicated server once (steamcmd) and treat it as read-only; each instance only has a small folder of

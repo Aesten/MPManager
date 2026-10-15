@@ -25,6 +25,8 @@ internal static class Standby
     private static DateTime? _emptySince;
     private static bool _standingBy;
 
+    public static bool IsStandingBy => _standingBy;
+
     public static void Tick()
     {
         List<NetworkCommunicator> players = Peers.Players();

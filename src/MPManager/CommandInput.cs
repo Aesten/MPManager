@@ -131,6 +131,20 @@ internal static class CommandInput
     {
         while (Pending.TryDequeue(out Request request))
         {
+            if (request.Command == Status.Request)
+            {
+                // For programs, polled often: not logged.
+                try
+                {
+                    request.Reply = new List<string> { Status.Json() };
+                }
+                catch (Exception e)
+                {
+                    request.Reply = new List<string> { "{\"error\":\"" + e.GetType().Name + "\"}" };
+                }
+                request.Done.Set();
+                continue;
+            }
             MPManagerSubModule.Log("> " + request.Command);
             string chatCommand = ChatInterceptor.IsCommand(request.Command) ? request.Command
                 : Commands.IsKnown(request.Command.Split(' ')[0]) ? "!" + request.Command

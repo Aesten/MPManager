@@ -1,30 +1,41 @@
 #!/usr/bin/env bash
-# Controls the Bannerlord dedicated server on this machine.
+# Controls the Bannerlord dedicated server instances on this machine (see mpManager/docs/fleet.md).
 #
-# Usage: mpm <command> [args]
+# Usage: mpm [<id> | all] <command> [args]
+#   <id>: instance 0-10; none = 0, the test server; all = the production instances 1-10 that exist (never 0)
 #   cmd <command...>     run a command and print the server's answer: chat commands (mpm cmd maps) or
 #                        console commands and options (mpm cmd MaxNumberOfPlayers 20)
 #   logs [-f] [-n N]     the last N (default 50) log lines without noise, -f to follow; --all: unfiltered
 #   perf [-n N] [--players]  the last N (default 12, two minutes) rows of this run's server metrics, or with
 #                        --players the per-player ones (ping, jitter, loss); columns are explained in Metrics.cs
-#   start [options]      start the server in the background; options go to run-server.sh
-#   stop | restart | status
+#   start [options]      start the instance's service; options go to run-server.sh (--vanilla, --no-stats...)
+#                        and stay until the next plain start (a crash restart keeps them)
+#   stop | status [--json]   (--json: MPManager's live state: mode, map, factions, state, players)
+#   restart [options] [--when-empty]  restart now, or once nobody is on (nobody gets kicked)
+#   apply                rebuild the effective configuration from the layers (live unless server.txt changed)
+#   config [--json]      the instance's settings with the layer each comes from (passwords hidden)
+#   config set <key> <value...> | config unset <key>
+#                        change the instance's own settings (instances/<id>/settings.txt), then apply
+#   list [--json]        every instance: service state, players, mission state, port, name, pending restart
+#   create <id> [profile] ["<name>"]  a new instance (instances/<id>/settings.txt); the name defaults to config's
 #
-# Lives in ~/bannerlord/ next to run-server.sh, linked as ~/.local/bin/mpm; mpManager's scripts/deploy.sh (run-server.sh: mpServerConfig's deploy.sh)
-# installs both. Commands go to MPManager's control socket (control.sock), which answers them; the server's
-# own console input doesn't work on Linux. Logs come from mpmanager.log, which MPManager writes as lines are
-# printed; server.log is screen's raw copy of the console, for anything missing there.
+# Instances run as systemd user services, bannerlord@<id> (mpServerConfig/systemd/bannerlord@.service), so they
+# restart after a crash and survive logouts; their output is in instances/<id>/server.log.
+# Lives in ~/bannerlord/ next to run-server.sh, linked as ~/.local/bin/mpm; mpManager's scripts/deploy.sh
+# (run-server.sh: mpServerConfig's deploy.sh) installs both. Commands go to each instance's MPManager control
+# socket (instances/<id>/control.sock), which answers them; the server's own console input doesn't work on Linux.
+# Logs come from mpmanager.log, which MPManager writes as lines are printed; server.log is screen's raw copy of
+# the console, for anything missing there.
 
 set -uo pipefail
 
 # Resolve the ~/.local/bin/mpm symlink to the script's real folder.
 SELF="$(readlink -f "${BASH_SOURCE[0]}")"
-SCRIPT_DIR="$(dirname "$SELF")"
-RUN_SERVER="$SCRIPT_DIR/run-server.sh"
-LOG_FILE="$SCRIPT_DIR/mpmanager.log"
-CONTROL_SOCKET="$SCRIPT_DIR/control.sock"
-METRICS_DIR="$SCRIPT_DIR/metrics"
-SERVER_PATTERN="^dotnet TaleWorlds.Starter.DotNetCore.Linux.dll"
+BASE="$(dirname "$SELF")"
+RUN_SERVER="$BASE/run-server.sh"
+BASE_PORT=7210
+# Seconds between starts with "mpm all start/restart" (the lobby rate-limits registrations).
+START_SPACING=10
 
 # Lines "mpm logs" and "mpm cmd" hide (extended regexes). Add more as needed.
 NOISE=(
@@ -39,86 +50,281 @@ NOISE=(
 )
 
 usage () {
-  sed -n '4,12p' "$SELF" | sed 's/^# \{0,1\}//'
+  sed -n '4,23p' "$SELF" | sed 's/^# \{0,1\}//'
 }
 
 filter () {
   grep --line-buffered -a -v -E -f <(printf '%s\n' "${NOISE[@]}")
 }
 
+exists () { [ -f "$BASE/instances/$1/settings.txt" ]; }
+running () { "$RUN_SERVER" -i "$1" --status 2>/dev/null; }
+unit () { echo "bannerlord@$1"; }
+service_state () { systemctl --user is-active "$(unit "$1")" 2>/dev/null; }
+
+# Starts an instance's service with these run-server.sh options (none: all mods, defaults).
+start_service () {
+  local id="$1"; shift
+  local dir="$BASE/instances/$id"
+  # Check the configuration here, so its errors show (the service would only log them).
+  "$RUN_SERVER" -i "$id" --render > /dev/null || return 1
+  printf '%s\n' "$*" > "$dir/start-options"
+  systemctl --user reset-failed "$(unit "$id")" 2>/dev/null
+  systemctl --user start "$(unit "$id")" || return 1
+  echo "Instance $id started (service $(unit "$id"), port $((BASE_PORT + id))${*:+, options: $*}). Log: $dir/server.log"
+}
+
+# Target: an id, "all" (existing production instances), or nothing (0).
+ALL=0
+IDS=(0)
+if [[ "${1:-}" =~ ^([0-9]|10)$ ]]; then
+  IDS=("$1"); shift
+elif [ "${1:-}" = all ]; then
+  ALL=1; IDS=()
+  for id in $(seq 1 10); do exists "$id" && IDS+=("$id"); done
+  shift
+  [ ${#IDS[@]} -gt 0 ] || { echo "No production instances (mpm create <1-10>)." >&2; exit 1; }
+elif [[ "${1:-}" =~ ^[0-9]+$ ]]; then
+  echo "Invalid instance id: $1 (0-10)." >&2; exit 1
+fi
+
 command="${1:-}"
 [ $# -gt 0 ] && shift
-case "$command" in
-  cmd)
-    [ $# -gt 0 ] || { echo "Usage: mpm cmd <command...>" >&2; exit 1; }
-    [ -S "$CONTROL_SOCKET" ] || { echo "Server is not taking commands (not running, or started without MPManager)." >&2; exit 1; }
-    # One command per connection; the server answers with what the command printed, then closes. -t: how long
-    # to wait for the answer after sending (map loads can hold the server up for a few seconds).
-    if ! reply="$(printf '%s
-' "$*" | socat -t 35 - UNIX-CONNECT:"$CONTROL_SOCKET" 2>/dev/null)"; then
-      echo "Server is not taking commands (not running, or started without MPManager)." >&2
-      exit 1
-    fi
-    if [ -n "$reply" ]; then printf '%s
-' "$reply"; else echo "(done, nothing printed)"; fi
-    ;;
-  logs)
-    follow=""
-    lines=50
-    all=0
-    while [ $# -gt 0 ]; do
-      case "$1" in
-        -f) follow="-F" ;;
-        -n) lines="${2:?-n needs a number}"; shift ;;
-        --all) all=1 ;;
-        *) echo "Unknown option: $1" >&2; exit 1 ;;
-      esac
-      shift
-    done
-    if [ "$all" = 1 ]; then
-      tail -n "$lines" $follow "$LOG_FILE"
-    else
-      # Filter first, then take the last N, so N counts shown lines; then follow new lines.
-      filter < "$LOG_FILE" | tail -n "$lines"
-      if [ -n "$follow" ]; then
-        tail -n 0 -F "$LOG_FILE" 2>/dev/null | filter
+# "mpm create 5" as well as "mpm 5 create".
+if [ "$command" = create ] && [[ "${1:-}" =~ ^[0-9]+$ ]]; then
+  [[ "$1" =~ ^([0-9]|10)$ ]] || { echo "Invalid instance id: $1 (0-10)." >&2; exit 1; }
+  IDS=("$1"); shift
+fi
+
+# MPManager's live state as JSON (one line), from the control socket; fails if it isn't answering.
+live_status () {
+  local socket="$BASE/instances/$1/control.sock" reply
+  [ -S "$socket" ] || return 1
+  reply="$(printf '@status\n' | socat -t 5 - UNIX-CONNECT:"$socket" 2>/dev/null)" || return 1
+  [ "${reply:0:1}" = "{" ] || return 1
+  printf '%s\n' "$reply"
+}
+
+# The latest row of an instance's server metrics, as "players agents state" (empty without metrics).
+latest_metrics () {
+  local file
+  file="$(ls -1t "$BASE/instances/$1/metrics"/server-*.csv 2>/dev/null | head -n 1)"
+  [ -n "$file" ] && tail -n 1 "$file" | awk -F, '$1 != "time" { print $2, $3, $4 }'
+}
+
+# One instance's command; returns its exit status.
+run_one () {
+  local id="$1"; shift
+  local cmd="$1"; shift
+  local dir="$BASE/instances/$id"
+  local socket="$dir/control.sock" log="$dir/mpmanager.log"
+  if [ "$cmd" != create ] && ! exists "$id"; then
+    echo "No instance $id (mpm create $id)." >&2; return 1
+  fi
+  case "$cmd" in
+    cmd)
+      [ $# -gt 0 ] || { echo "Usage: mpm [<id>|all] cmd <command...>" >&2; return 1; }
+      [ -S "$socket" ] || { echo "Instance $id is not taking commands (not running, or started without MPManager)." >&2; return 1; }
+      # One command per connection; the server answers with what the command printed, then closes. -t: how long
+      # to wait for the answer after sending (map loads can hold the server up for a few seconds).
+      local reply
+      if ! reply="$(printf '%s\n' "$*" | socat -t 35 - UNIX-CONNECT:"$socket" 2>/dev/null)"; then
+        echo "Instance $id is not taking commands (not running, or started without MPManager)." >&2; return 1
       fi
-    fi
-    ;;
-  perf)
-    lines=12
-    kind=server
-    while [ $# -gt 0 ]; do
-      case "$1" in
-        -n) lines="${2:?-n needs a number}"; shift ;;
-        --players) kind=players ;;
-        *) echo "Unknown option: $1" >&2; exit 1 ;;
+      if [ -n "$reply" ]; then printf '%s\n' "$reply"; else echo "(done, nothing printed)"; fi
+      ;;
+    logs)
+      local follow="" lines=50 all=0
+      while [ $# -gt 0 ]; do
+        case "$1" in
+          -f) follow="-F" ;;
+          -n) lines="${2:?-n needs a number}"; shift ;;
+          --all) all=1 ;;
+          *) echo "Unknown option: $1" >&2; return 1 ;;
+        esac
+        shift
+      done
+      if [ "$all" = 1 ]; then
+        tail -n "$lines" $follow "$log"
+      else
+        # Filter first, then take the last N, so N counts shown lines; then follow new lines.
+        filter < "$log" | tail -n "$lines"
+        if [ -n "$follow" ]; then
+          tail -n 0 -F "$log" 2>/dev/null | filter
+        fi
+      fi
+      ;;
+    perf)
+      local lines=12 kind=server file
+      while [ $# -gt 0 ]; do
+        case "$1" in
+          -n) lines="${2:?-n needs a number}"; shift ;;
+          --players) kind=players ;;
+          *) echo "Unknown option: $1" >&2; return 1 ;;
+        esac
+        shift
+      done
+      file="$(ls -1t "$dir/metrics"/"$kind"-*.csv 2>/dev/null | head -n 1)"
+      [ -n "$file" ] || { echo "No metrics yet in $dir/metrics." >&2; return 1; }
+      echo "$file"
+      { head -n 1 "$file"; tail -n +2 "$file" | tail -n "$lines"; } | column -t -s,
+      ;;
+    start)
+      if running "$id"; then echo "Instance $id is already running." >&2; return 1; fi
+      start_service "$id" "$@"
+      ;;
+    stop)
+      rm -f "$dir/restart-when-empty"
+      case "$(service_state "$id")" in
+        active|activating|reloading) systemctl --user stop "$(unit "$id")" && echo "Instance $id stopped." ;;
+        *) "$RUN_SERVER" -i "$id" --stop ;; # started by hand (screen), or not running
       esac
-      shift
-    done
-    file="$(ls -1t "$METRICS_DIR"/"$kind"-*.csv 2>/dev/null | head -n 1)"
-    [ -n "$file" ] || { echo "No metrics yet in $METRICS_DIR." >&2; exit 1; }
-    echo "$file"
-    { head -n 1 "$file"; tail -n +2 "$file" | tail -n "$lines"; } | column -t -s,
-    ;;
-  start)
-    "$RUN_SERVER" -d "$@"
-    ;;
-  stop)
-    "$RUN_SERVER" --stop
-    ;;
-  restart)
-    "$RUN_SERVER" --stop && "$RUN_SERVER" -d "$@"
-    ;;
-  status)
-    if pgrep -f "$SERVER_PATTERN" >/dev/null; then echo "Server is running."; else echo "Server is not running."; fi
-    ;;
-  ""|-h|--help|help)
-    usage
-    ;;
-  *)
-    echo "Unknown command: $command" >&2
-    usage >&2
-    exit 1
-    ;;
+      ;;
+    restart)
+      local when_empty=0 opts=() arg
+      for arg in "$@"; do
+        if [ "$arg" = --when-empty ]; then when_empty=1; else opts+=("$arg"); fi
+      done
+      if [ "$when_empty" = 1 ] && running "$id"; then
+        [ "$(service_state "$id")" = active ] || { echo "Instance $id isn't running as a service; restart --when-empty needs it (mpm $id restart)." >&2; return 1; }
+        printf '%s\n' "${opts[*]}" > "$dir/start-options"
+        touch "$dir/restart-when-empty"
+        echo "Instance $id restarts as soon as nobody is on (mpm $id stop cancels it by stopping now)."
+        return 0
+      fi
+      run_one "$id" stop > /dev/null || return 1
+      start_service "$id" "${opts[@]}"
+      ;;
+    status)
+      if [ "${1:-}" = --json ]; then
+        live_status "$id" || { echo "Instance $id is not taking commands (not running, or started without MPManager)." >&2; return 1; }
+        return 0
+      fi
+      local state; state="$(service_state "$id")"
+      if running "$id"; then
+        echo "Instance $id is running (service: $state)."
+      else
+        echo "Instance $id is not running (service: $state)."
+      fi
+      [ -f "$dir/restart-when-empty" ] && echo "Restarts when empty."
+      [ -f "$dir/restart-pending" ] && echo "Configuration changed: restart pending."
+      true
+      ;;
+    apply) "$RUN_SERVER" -i "$id" --render ;;
+    config)
+      local action="${1:-show}"
+      case "$action" in
+        show|--json)
+          [ "$action" = show ] && shift
+          local rows
+          rows="$("$RUN_SERVER" -i "$id" --settings)" || return 1
+          # Passwords are shown as set or not, never their value.
+          rows="$(printf '%s\n' "$rows" | awk -F'\t' -v OFS='\t' '$1 ~ /password$/ { $2 = ($2 == "" ? "" : "(set)") } { print }')"
+          if [ "${1:-}" = --json ] || [ "$action" = --json ]; then
+            printf '%s\n' "$rows" | jq -R -s -c 'split("\n") | map(select(length > 0) | split("\t") | { key: .[0], value: .[1], layer: .[2] })'
+          else
+            { echo "KEY	VALUE	LAYER"; printf '%s\n' "$rows"; } | column -t -s '	'
+          fi
+          ;;
+        set|unset)
+          local key="${2:-}"
+          [[ "$key" =~ ^[A-Za-z0-9_.]+$ ]] || { echo "Usage: mpm [<id>|all] config set <key> <value...> | config unset <key>" >&2; return 1; }
+          shift 2
+          local file="$dir/settings.txt" tmp
+          tmp="$(mktemp)"
+          # Drop the key's line(s), then add the new value at the end.
+          awk -v key="$key" '{ line = $0; sub(/^[ \t]+/, "", line) } index(line, "=") && substr(line, 1, index(line, "=") - 1) ~ "^" key "[ \t]*$" { next } { print }' "$file" > "$tmp"
+          [ "$action" = set ] && printf '%s = %s\n' "$key" "$*" >> "$tmp"
+          cat "$tmp" > "$file"; rm -f "$tmp"
+          echo "Instance $id: $key $([ "$action" = set ] && echo "set" || echo "unset") in its settings."
+          "$RUN_SERVER" -i "$id" --render
+          ;;
+        *) echo "Usage: mpm [<id>|all] config [--json] | config set <key> <value...> | config unset <key>" >&2; return 1 ;;
+      esac
+      ;;
+    create)
+      local profile="${1:-}" name="${2:-}"
+      exists "$id" && { echo "Instance $id already exists ($dir/settings.txt)." >&2; return 1; }
+      if [ -n "$profile" ] && [ ! -d "$BASE/profiles/$profile" ]; then
+        echo "No profile '$profile' in $BASE/profiles/." >&2; return 1
+      fi
+      mkdir -p "$dir"
+      {
+        echo "# Instance $id (port $((BASE_PORT + id))). Only the keys that differ from the profile and config/settings.txt"
+        echo "# (same keys); {id} is replaced by the instance id."
+        echo "# The server owns this file (mpm, the app); mpServerConfig's deploy.sh only installs it when the server has none."
+        [ -n "$profile" ] && echo "profile = $profile"
+        [ -n "$name" ] && echo "name = $name"
+      } > "$dir/settings.txt"
+      echo "Created instance $id ($dir/settings.txt); mpm $id start starts it."
+      ;;
+    *)
+      echo "Unknown command: $cmd" >&2; usage >&2; return 1 ;;
+  esac
+}
+
+list () {
+  local json=0
+  [ "${1:-}" = --json ] && json=1
+  local rows=() id name players agents state up pending service port
+  for id in $(seq 0 10); do
+    exists "$id" || continue
+    name="$(awk '$1 == "ServerName" { $1 = ""; sub(/^ /, ""); print; exit }' "$BASE/instances/$id/run/server.txt" 2>/dev/null)"
+    up=false; players=""; agents=""; state=""
+    service="$(service_state "$id")"; [ -n "$service" ] || service=unknown
+    if running "$id"; then
+      up=true
+      read -r players agents state <<< "$(latest_metrics "$id")"
+    fi
+    pending=none
+    [ -f "$BASE/instances/$id/restart-pending" ] && pending=config
+    [ -f "$BASE/instances/$id/restart-when-empty" ] && pending=when_empty
+    rows+=("$id|$((BASE_PORT + id))|$up|$service|${players:-}|${agents:-}|${state:-}|$pending|$name")
+  done
+  if [ "$json" = 1 ]; then
+    # One object per instance; running ones also get MPManager's live state ("live": mode, map, factions, state,
+    # players; null if it doesn't answer).
+    local row live
+    for row in "${rows[@]}"; do
+      IFS='|' read -r id port up service players agents state pending name <<< "$row"
+      live=null
+      if [ "$up" = true ]; then live="$(live_status "$id")" || live=null; fi
+      jq -n -c --argjson id "$id" --argjson port "$port" --argjson running "$up" --arg service "$service" \
+        --arg players "$players" --arg agents "$agents" --arg state "$state" --arg restart "$pending" \
+        --arg name "$name" --argjson live "$live" \
+        '{ id: $id, port: $port, running: $running, service: $service,
+           players: ($players | if . == "" then null else tonumber end),
+           agents: ($agents | if . == "" then null else tonumber end),
+           state: ($state | if . == "" then null else . end),
+           restart: ($restart | if . == "none" then null else . end),
+           name: $name, live: $live }'
+    done | jq -s -c '.'
+  else
+    { echo "ID|PORT|RUNNING|SERVICE|PLAYERS|AGENTS|STATE|RESTART|NAME"
+      printf '%s\n' "${rows[@]}" | awk -F'|' -v OFS='|' '{ $3 = $3 == "true" ? "yes" : "no"; $8 = $8 == "none" ? "-" : ($8 == "config" ? "pending" : "when empty"); for (i = 5; i <= 7; i++) if ($i == "") $i = "-"; print }'
+    } | column -t -s'|'
+  fi
+}
+
+case "$command" in
+  ""|-h|--help|help) usage; exit 0 ;;
+  list) list "$@"; exit $? ;;
 esac
+
+if [ "$ALL" = 1 ]; then
+  [ "$command" = logs ] && [[ " $* " == *" -f "* ]] && { echo "logs -f follows one instance (mpm <id> logs -f)." >&2; exit 1; }
+  [ "$command" = create ] && { echo "create takes one id (mpm <id> create)." >&2; exit 1; }
+  status=0
+  first=1
+  for id in "${IDS[@]}"; do
+    # The lobby rate-limits registrations (error 1015) when many servers start at once: space starts out.
+    if [ "$first" = 0 ] && { [ "$command" = start ] || { [ "$command" = restart ] && [[ " $* " != *" --when-empty "* ]]; }; }; then
+      sleep "$START_SPACING"
+    fi
+    first=0
+    echo "== $id"
+    run_one "$id" "$command" "$@" || status=1
+  done
+  exit $status
+fi
+run_one "${IDS[0]}" "$command" "$@"

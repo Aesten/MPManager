@@ -43,6 +43,14 @@ public class MPManagerSubModule : MBSubModuleBase
             Log("Metrics stopped after an error: " + e);
         }
         CommandInput.Tick();
+        try
+        {
+            RestartWhenEmpty.Tick();
+        }
+        catch (Exception e)
+        {
+            Log("Restart when empty: " + e.Message);
+        }
         if (_failed)
         {
             return;

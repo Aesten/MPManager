@@ -12,8 +12,9 @@ using TaleWorlds.MountAndBlade.Diamond;
 namespace MPManager;
 
 // Chat commands ("!setmap lighthouse vla stur"; "/" only from the socket, clients never send it), from players in chat and from the control socket
-// (mpm cmd /setmap lighthouse). They are never shown in chat (see ChatInterceptor). Commands that change the
-// server are for admins (players who joined with the admin password); the socket (mpm cmd) counts as an admin.
+// (mpm cmd /setmap lighthouse). They are never shown in chat (see ChatInterceptor). Who may run what, down to
+// subcommands, is in the permissions file (Permissions); a command without a rule keeps its level below ("admin":
+// players who joined with the admin password). The socket (mpm cmd) may run everything.
 //
 // Aliases come from MPM_ALIASES_FILE (~/bannerlord/aliases.txt, from mpServerConfig/server/aliases.txt), re-read when it
 // changes: "sm = setmap" makes "!sm lighthouse" run "!setmap lighthouse"; an alias can include arguments
@@ -120,20 +121,47 @@ internal static class Commands
                 caller.Reply("Unknown command !" + name + ". !help lists the commands.");
                 return;
             }
-            if (modCommand.AdminOnly && !caller.IsAdmin)
+            if (!Permitted(caller, modCommand.Names, args, modCommand.AdminOnly, name))
             {
-                caller.Reply("!" + name + " is for admins (join with the admin password).");
                 return;
             }
             modCommand.Run(caller.Peer, args, caller.Reply);
             return;
         }
-        if (command.Admin && !caller.IsAdmin)
+        if (!Permitted(caller, new[] { command.Name }, args, command.Admin, name))
         {
-            caller.Reply("!" + name + " is for admins (join with the admin password).");
             return;
         }
         command.Run(caller, args);
+    }
+
+    private static Permissions.Level Default(bool admin) => admin ? Permissions.Level.Admin : Permissions.Level.Everyone;
+
+    private static bool Allows(Caller caller, IReadOnlyList<string> names, IReadOnlyList<string> args, bool adminByDefault) =>
+        Permissions.Allows(Permissions.Required(names, args, Default(adminByDefault)), caller.IsAdmin, caller.IsConsole);
+
+    // Checks the permissions for a command with these arguments; tells the caller when they can't.
+    private static bool Permitted(Caller caller, IReadOnlyList<string> names, string[] args, bool adminByDefault, string typed)
+    {
+        Permissions.Level required = Permissions.Required(names, args, Default(adminByDefault));
+        if (Permissions.Allows(required, caller.IsAdmin, caller.IsConsole))
+        {
+            return true;
+        }
+        // "!b reset is for admins" when the command itself is open, "!kick is for admins" otherwise.
+        string what = "!" + typed + (args.Length > 0 && Allows(caller, names, new string[0], adminByDefault) ? " " + args[0] : "");
+        caller.Reply(what + " is " + Permissions.Describe(required) + ".");
+        return false;
+    }
+
+    // Whether the caller may run the command itself (no arguments), and otherwise the subcommands they may run.
+    private static (bool Root, List<string> Subcommands) Usable(Caller caller, IReadOnlyList<string> names, bool adminByDefault)
+    {
+        bool root = Allows(caller, names, new string[0], adminByDefault);
+        List<string> subs = root ? new List<string>() : Permissions.AllowedSubcommands(names, caller.IsAdmin, caller.IsConsole)
+            .Where(s => Allows(caller, names, s.Split(' '), adminByDefault))
+            .ToList();
+        return (root, subs);
     }
 
     internal static bool IsBuiltIn(string name) => All.Any(c => c.Name == name);
@@ -185,13 +213,18 @@ internal static class Commands
         MPManagerSubModule.Log("Loaded " + Aliases.Count + " command alias(es) from " + path + ".");
     }
 
-    // !help: one short line per command the caller can use, with its aliases ("!endwarmup  (!ew, !ewf = --force)").
+    // !help: one short line per command the caller can use (by the permissions), with its aliases
+    // ("!endwarmup  (!ew, !ewf = --force)"); a command they can only use parts of lists those ("!mpb debug, speedo").
     // !help <command or alias>: that command's usage and description.
     private static void Help(Caller caller, string[] args)
     {
         LoadAliases();
-        List<Command> available = All.Where(c => caller.IsAdmin || !c.Admin).ToList();
-        List<ModCommands.Entry> modAvailable = ModCommands.All.Where(c => caller.IsAdmin || !c.AdminOnly).ToList();
+        var builtIn = All.Select(c => (Command: c, Use: Usable(caller, new[] { c.Name }, c.Admin)))
+            .Where(x => x.Use.Root || x.Use.Subcommands.Count > 0).ToList();
+        var mods = ModCommands.All.Select(c => (Command: c, Use: Usable(caller, c.Names, c.AdminOnly)))
+            .Where(x => x.Use.Root || x.Use.Subcommands.Count > 0).ToList();
+        List<Command> available = builtIn.Select(x => x.Command).ToList();
+        List<ModCommands.Entry> modAvailable = mods.Select(x => x.Command).ToList();
         if (args.Length > 0)
         {
             string name = args[0].TrimStart('!', '/').ToLowerInvariant();
@@ -205,11 +238,13 @@ internal static class Commands
             {
                 caller.Reply("!" + command.Name + (command.Usage.Length > 0 ? " " + command.Usage : "") + AliasText(command.Name));
                 caller.Reply(command.Description);
+                PartsText(caller, command.Name, builtIn.First(x => x.Command == command).Use);
             }
             else if (modCommand != null)
             {
                 caller.Reply("!" + modCommand.Name + (modCommand.Usage.Length > 0 ? " " + modCommand.Usage : "") + AliasText(modCommand.Name, modCommand.Names.Skip(1)));
                 caller.Reply(modCommand.Description + " (" + modCommand.Mod + ")");
+                PartsText(caller, modCommand.Name, mods.First(x => x.Command == modCommand).Use);
             }
             else
             {
@@ -217,15 +252,26 @@ internal static class Commands
             }
             return;
         }
-        foreach (Command command in available)
+        foreach (var (command, use) in builtIn)
         {
-            caller.Reply("!" + command.Name + AliasText(command.Name));
+            caller.Reply("!" + command.Name + Only(use) + AliasText(command.Name));
         }
-        foreach (ModCommands.Entry modCommand in modAvailable)
+        foreach (var (modCommand, use) in mods)
         {
-            caller.Reply("!" + modCommand.Name + AliasText(modCommand.Name, modCommand.Names.Skip(1)) + "  [" + modCommand.Mod + "]");
+            caller.Reply("!" + modCommand.Name + Only(use) + AliasText(modCommand.Name, modCommand.Names.Skip(1)) + "  [" + modCommand.Mod + "]");
         }
         caller.Reply("!help <command> for details.");
+    }
+
+    // " debug, speedo" for a command the caller can only use parts of; "" otherwise.
+    private static string Only((bool Root, List<string> Subcommands) use) => use.Root ? "" : " " + string.Join(", ", use.Subcommands);
+
+    private static void PartsText(Caller caller, string name, (bool Root, List<string> Subcommands) use)
+    {
+        if (!use.Root)
+        {
+            caller.Reply("You can use: " + string.Join(", ", use.Subcommands.Select(s => "!" + name + " " + s)) + ".");
+        }
     }
 
     // "  (!ew, !ewf = --force)", or "" without aliases; extra: other names the command has (a mod's "!mpb").
@@ -612,6 +658,8 @@ internal static class Commands
         public string Name => Peer?.UserName ?? "console";
 
         public bool IsAdmin => Peer == null || Peer.IsAdmin;
+
+        public bool IsConsole => Peer == null;
 
         public void Reply(string text)
         {

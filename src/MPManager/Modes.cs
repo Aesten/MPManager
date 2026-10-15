@@ -17,7 +17,9 @@ namespace MPManager;
 //                           Modules/Multiplayer/SceneObj), "-id" to leave one out; the first map is the one the
 //                           mode starts on
 //   bots = yes              whether !bots works (otherwise bots are kept at 0)
-//   default = yes           applied when the server starts
+//   factions = fixed        the server starts with the mode's own CultureTeam1/2 (below) rather than random ones,
+//                           when the start setting names no factions (groupfight: the same culture on both sides)
+//   default = yes           the mode the server starts with when there's no start setting
 internal sealed class Mode
 {
     public string Name { get; set; }
@@ -26,6 +28,7 @@ internal sealed class Mode
     public List<string> MapRules { get; } = new List<string>();
     public bool BotsAllowed { get; set; }
     public bool IsDefault { get; set; }
+    public bool FixedFactions { get; set; }
     public List<(string Option, string Value)> Options { get; } = new List<(string, string)>();
 
     public Choice ToChoice() => new Choice(Name, Aliases.Prepend(Name).ToArray());
@@ -96,17 +99,84 @@ internal static class Modes
             .Select(id => MapNames.Choice(id)).ToList();
     }
 
-    // At startup, once the config has been applied: the default mode's game type, map and options.
+    private static readonly Random Random = new Random();
+
+    // At startup, once the config has been applied: the start setting ("<mode> [map] [team1 team2]", names as in
+    // !mode and !setmap), or else the mode marked default. A map or factions it doesn't name are random: a map from
+    // the mode's pool, two different main cultures (unless the mode has factions = fixed: its own).
     public static void ApplyDefault()
     {
         Load();
-        Mode mode = All.FirstOrDefault(m => m.IsDefault);
+        string[] words = (Settings.Start ?? "").Split((char[])null, StringSplitOptions.RemoveEmptyEntries);
+        Mode mode = null;
+        string error;
+        if (words.Length > 0)
+        {
+            Choice chosen = Matcher.Resolve(words[0], All.Select(m => m.ToChoice()).ToList(), out error);
+            mode = chosen == null ? null : All.First(m => m.Name == chosen.Id);
+            if (mode == null)
+            {
+                MPManagerSubModule.Log("start = " + Settings.Start + ": " + error + " Starting with the default mode.");
+                words = new string[0];
+            }
+        }
+        mode ??= All.FirstOrDefault(m => m.IsDefault) ?? All.FirstOrDefault();
         if (mode == null)
         {
             return;
         }
-        Apply(mode, map: null, current: true);
-        MPManagerSubModule.Log("Default mode: " + mode.Name + " (" + mode.GameType + " on " + MultiplayerOptions.OptionType.Map.GetStrValue() + ").");
+
+        List<Choice> maps = mode.Maps();
+        Choice map = null;
+        if (words.Length >= 2)
+        {
+            map = Matcher.Resolve(words[1], maps, out error);
+            if (map == null)
+            {
+                MPManagerSubModule.Log("start = " + Settings.Start + ": " + error + " Starting on a random map.");
+            }
+        }
+        if (map == null && maps.Count > 0)
+        {
+            map = words.Length == 0 && mode.IsDefault ? maps[0] : maps[Random.Next(maps.Count)];
+        }
+
+        string team1 = null, team2 = null;
+        List<Choice> cultures = MissionFlow.Cultures();
+        if (words.Length >= 4)
+        {
+            team1 = Matcher.Resolve(words[2], cultures, out error)?.Id;
+            team2 = team1 == null ? null : Matcher.Resolve(words[3], cultures, out error)?.Id;
+            if (team2 == null)
+            {
+                MPManagerSubModule.Log("start = " + Settings.Start + ": " + error + " Starting with random factions.");
+                team1 = null;
+            }
+        }
+        else if (words.Length == 3)
+        {
+            MPManagerSubModule.Log("start = " + Settings.Start + ": name both factions (team1 team2). Starting with random factions.");
+        }
+        if (team1 == null && !mode.FixedFactions && words.Length > 0 && cultures.Count >= 2)
+        {
+            int first = Random.Next(cultures.Count);
+            int second = (first + 1 + Random.Next(cultures.Count - 1)) % cultures.Count;
+            team1 = cultures[first].Id;
+            team2 = cultures[second].Id;
+        }
+
+        Apply(mode, map?.Id, current: true);
+        if (team1 != null)
+        {
+            foreach (var access in new[] { MultiplayerOptions.MultiplayerOptionsAccessMode.NextMapOptions, MultiplayerOptions.MultiplayerOptionsAccessMode.CurrentMapOptions })
+            {
+                MultiplayerOptions.OptionType.CultureTeam1.SetValue(team1, access);
+                MultiplayerOptions.OptionType.CultureTeam2.SetValue(team2, access);
+            }
+        }
+        MPManagerSubModule.Log("Starting with " + mode.Name + " (" + mode.GameType + ") on " + MultiplayerOptions.OptionType.Map.GetStrValue()
+            + ", " + MultiplayerOptions.OptionType.CultureTeam1.GetStrValue() + " vs " + MultiplayerOptions.OptionType.CultureTeam2.GetStrValue()
+            + (words.Length > 0 ? " (start = " + Settings.Start + ")." : " (default mode)."));
     }
 
     // Sets the mode, its options, and the map (null: the mode's first map), for the next mission (and the current
@@ -261,6 +331,9 @@ internal static class Modes
                     break;
                 case "bots":
                     mode.BotsAllowed = value.Equals("yes", StringComparison.OrdinalIgnoreCase) || value.Equals("true", StringComparison.OrdinalIgnoreCase);
+                    break;
+                case "factions":
+                    mode.FixedFactions = value.Equals("fixed", StringComparison.OrdinalIgnoreCase);
                     break;
                 case "default":
                     mode.IsDefault = value.Equals("yes", StringComparison.OrdinalIgnoreCase) || value.Equals("true", StringComparison.OrdinalIgnoreCase);
