@@ -37,7 +37,7 @@ prints its auth token into them), and don't share `systemctl --user status` outp
 On the server (`ssh bannerlord@7900x`). Without an id, `mpm` means the test server; `all` means Playground 1–10.
 
 ```sh
-mpm list                      # every server: running, players, state, pending restart
+mpm list                      # every server: running, uptime, players, state, pending restart
 mpm 3 status                  # one server; status --json for its live mode, map, factions, players
 mpm all start                 # start Playground 1-10 (10 s apart: the lobby rate-limits registrations)
 mpm all stop                  # stop them (never touches the test server)
