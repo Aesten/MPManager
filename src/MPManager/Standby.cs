@@ -73,6 +73,7 @@ internal static class Standby
         foreach (NetworkCommunicator peer in players.Where(p => !Known.Contains(p)).ToList())
         {
             Known.Add(peer);
+            PlayerNumIds.Of(peer); // their number from now on, for !players and other mods
             ServerChat.Broadcast(peer.UserName + " joined.");
         }
         foreach (NetworkCommunicator peer in Known.Where(p => !players.Contains(p)).ToList())

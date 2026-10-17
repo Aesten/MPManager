@@ -23,7 +23,7 @@ server keeps these; production servers open more (mpServerConfig's `config/permi
 |---|---|---|---|
 | `!setmap <map> [team1 team2]` | `!sm` | admin | Switches the map (and optionally the cultures) and restarts the mission. `current` or `c` keeps the map: `!setmap c v s` (Vlandia vs Sturgia). |
 | `!resetmap` | `!rm` | admin | Restarts the mission with the same map and cultures. |
-| `!mode [mode] [map]` | | admin | Lists the modes, or switches to one (`skirmish`/`skirm`, `groupfight`/`gf`, `teamdeathmatch`/`tdm`), optionally on a map, and restarts. |
+| `!mode [mode] [map]` | | admin | Lists the modes, or switches to one (`skirmish`/`skirm`, `groupfight`/`gf`, `groupduel`/`gd`, `teamdeathmatch`/`tdm`), optionally on a map, and restarts. |
 | `!bots [team1 team2]` | | admin | Shows or sets the bots per team, e.g. `!bots 0 10`. Only in modes with bots (`tdm`); lowering removes bots at once. |
 | `!warmup` | `!wu` | admin | Back to warmup: cancels an ending warmup, or restarts the mission if the match has started. |
 | `!endwarmup [--force]` | `!ew`, `!ewf` (= `--force`) | admin | Ends this mission's warmup with the game's 30 s countdown, or with `--force` the 3 s "battle starting" one. |
@@ -34,6 +34,7 @@ server keeps these; production servers open more (mpServerConfig's `config/permi
 | `!ready` | `!r` | everyone | Skirmish/Battle warmup: your team is ready. When a player of the other team readies within 60 s, warmup ends with the 30 s countdown. A ready expires after 60 s. |
 | `!notready` | `!nr` | everyone | Takes back your team's ready. During a countdown started by `!ready`, cancels it and goes back to warmup (players on either team can). |
 | `!specs` | | everyone | Lists the spectators. |
+| `!players` | | everyone | Everyone on the server with their player numbers (`#17 Aesten`), which commands take instead of names. |
 | `!maps` | | everyone | Numbered list of the maps for the current mode, one line per map with its variants in brackets: `1. Xauna [default\|rain\|winter]`. A number picks that map's default version (`!setmap 1`). |
 | `!help [command]` | | everyone | Lists the commands you may use, one per line with their aliases (a command you may only use parts of lists those: `!mpb debug`); `!help <command>` shows its usage and description. |
 
@@ -91,10 +92,18 @@ from the server console; `reply` answers the caller privately. MPManager checks 
 command and its arguments before calling `Run` (so the mod doesn't check them again; `adminOnly` is the level when
 no rule applies), on the main thread, outside packet handling, so it can send network messages
 directly. Names taken by MPManager's own commands or another mod are refused (logged). `!help` lists
-registered commands with their mod's name, and aliases can target them (`hk = b horse_knee`).
+registered commands with their mod's name, and aliases can target them (`hk = b horse_knee`). A mod with several
+commands calls `TryRegister` once per command (again for the same one: nothing happens).
+
+**Player numbers.** Every player gets a number the first time a server sees them, for good (`PlayerNumIds`): one
+line per player, appended to `MPM_PLAYER_NUMIDS_FILE` (`player-numids.txt` in the working directory if unset; on
+the fleet `~/bannerlord/data/player-numids.txt`, shared by every instance, so a number is the same on every
+server). Commands that name a player take the number instead (`!kick 17`, `!tp 17 4`, `#17` works too), `!players`
+lists them, and the "matches several players" lists show them. Mods get them with
+`MPManagerLink.TryGetNumId(peer, out int numId)` (false without MPManager), e.g. MPGroupDuel's `!invite 17`.
 
 **Matching names.** Maps, cultures and players are typed without spaces and matched loosely: by number
-(from `!maps`; not with a leading zero, so `004` is a map name), by id or name, by any unique part
+(maps: from `!maps`, not with a leading zero, so `004` is a map name; players: their player number), by id or name, by any unique part
 (`lighthouse`, `vla`, `emp`), by the end of an id when several contain it (`008` is `mp_skirmish_map_008`,
 not `..._008_skin`), or misspelled (`lighthose`, `vatenborg`). One mistake is allowed per four letters,
 compared with the closest part of the name. When it's ambiguous (`fort`), the candidates are listed instead.

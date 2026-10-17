@@ -25,14 +25,21 @@
 //   // reply: answers the caller privately. Runs on the main thread, outside packet handling. MPManager has already
 //   // checked the caller's rights for these arguments: don't check them again.
 //
+// A mod with several commands calls TryRegister once per command.
+//
+// Player numbers: MPManager gives every player a number for good (PlayerNumIds), shared by the fleet's servers, which
+// commands take instead of names ("!kick 17"). TryGetNumId gives a mod a player's number, so its own commands can
+// take them too; without MPManager there are none (match names only).
+//
 // adminOnly is the command's level when neither the server's permissions file nor the mod's defaults have a rule
 // for it. Default rules use permissions.txt's syntax ("<command> [word ...] = everyone | admin | console", * for any
 // one word, the most specific rule wins); the server's file overrides them.
 //
-// The contract is MPManager's public ModCommands methods, found by name: never change their signatures, only add
+// The contract is MPManager's public ModCommands and PlayerNumIds methods, found by name: never change their signatures, only add
 // methods (a mod built against a missing one falls back, as without MPManager).
 
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using TaleWorlds.MountAndBlade;
@@ -46,14 +53,19 @@ internal static class MPManagerLink
 
     private static bool _permissionsSent;
 
+    // Commands already handed to MPManager, by their first name: registering one again changes nothing.
+    private static readonly HashSet<string> Registered = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+    private static MethodInfo _numId;
+
     // Registers the command with MPManager if it's loaded; false if it isn't (or its contract changed), in which
-    // case the mod handles chat itself.
+    // case the mod handles chat itself. Once per command; again for the same command: nothing more happens.
     public static bool TryRegister(string[] names, string usage, string description, bool adminOnly,
         Action<NetworkCommunicator, string[], Action<string>> run)
     {
-        if (Routed)
+        if (names == null || names.Length == 0 || Registered.Contains(names[0]))
         {
-            return true;
+            return Routed;
         }
         try
         {
@@ -63,6 +75,7 @@ internal static class MPManagerLink
                 return false;
             }
             register.Invoke(null, new object[] { names, usage, description, adminOnly, run });
+            Registered.Add(names[0]);
             Routed = true;
             return true;
         }
@@ -97,9 +110,34 @@ internal static class MPManagerLink
         }
     }
 
-    private static MethodInfo Method(string name) => AppDomain.CurrentDomain.GetAssemblies()
+    // The player's number (MPManager's PlayerNumIds); false without MPManager, or if it has none for them. Main
+    // thread only (a player's first number is written to a file shared by the servers).
+    public static bool TryGetNumId(NetworkCommunicator peer, out int numId)
+    {
+        numId = -1;
+        if (peer == null)
+        {
+            return false;
+        }
+        try
+        {
+            _numId ??= Method("Get", "MPManager.PlayerNumIds");
+            if (_numId == null)
+            {
+                return false;
+            }
+            numId = (int)_numId.Invoke(null, new object[] { peer });
+            return numId > 0;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
+    private static MethodInfo Method(string name, string type = "MPManager.ModCommands") => AppDomain.CurrentDomain.GetAssemblies()
         .Where(a => a.GetName().Name == "MPManager")
-        .Select(a => a.GetType("MPManager.ModCommands"))
+        .Select(a => a.GetType(type))
         .FirstOrDefault(t => t != null)
         ?.GetMethod(name, BindingFlags.Public | BindingFlags.Static);
 }

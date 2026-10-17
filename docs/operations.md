@@ -27,7 +27,7 @@ Three places, each owning different things. Edit in the right one, or your chang
 | One server's own settings (name, profile...) | the server: `mpm <id> config set ...` | immediately (applied) |
 | Launcher, systemd unit, auth token | mpServerConfig `server/`, `systemd/` | `./deploy.sh`, then a restart |
 | Custom maps | mpServerConfig `maps/<mode>/` | `./deploy-maps.sh`, then a restart |
-| MPManager / MPBalancer / MPStats | each repo's code; balance defaults in mpBalancer's `src/MPBalancer/defaults.txt` | the repo's `scripts/deploy.sh`, then a restart |
+| MPManager / MPBalancer / MPStats / MPGroupDuel | each repo's code; balance defaults in mpBalancer's `src/MPBalancer/defaults.txt` | the repo's `scripts/deploy.sh`, then a restart |
 
 mpServerConfig and the server's settings hold the passwords: keep the repo private, don't share logs (the server
 prints its auth token into them), and don't share `systemctl --user status` output (it shows the token too).
@@ -113,13 +113,14 @@ Players' `!help` only lists what they may run. Syntax details: mpManager's READM
 ### Deploy a mod update
 
 ```sh
-scripts/deploy.sh                       # in mpManager, mpBalancer or mpStats: builds and installs
+scripts/deploy.sh                       # in mpManager, mpBalancer, mpStats or mpGroupDuel: builds and installs
 ssh bannerlord@7900x '~/bannerlord/mpm 0 restart'                   # test it on the test server first
 ssh bannerlord@7900x '~/bannerlord/mpm all restart --when-empty'    # then the Playgrounds
 ```
 
-Running servers keep the version they loaded until they restart. mpBalancer and mpStats build against mpManager's
-shared `link/MPManagerLink.cs`, so keep the three repos side by side.
+Running servers keep the version they loaded until they restart. mpBalancer, mpStats and mpGroupDuel build against
+mpManager's shared `link/MPManagerLink.cs`: mpGroupDuel from its `external/mpManager` submodule if checked out, the
+others from an mpManager checkout next to them, so keep the repos side by side.
 
 ### Try a balance change
 
@@ -201,5 +202,6 @@ nothing loaded. The next mission starts when someone joins.
     logs/                            earlier runs, gzipped, 30 days
     metrics/                         performance and hit CSVs, 30 days
     stats/                           match records (MPStats), kept
+  data/player-numids.txt             player numbers (MPManager), shared by every instance
 ~/.config/systemd/user/bannerlord@.service
 ```

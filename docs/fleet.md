@@ -64,7 +64,7 @@ before:
 | `password` | game password; empty = open |
 | `max_players` | player cap (20) |
 | `inactivity_kick` | `no`: the game never kicks idle players |
-| `start` | `<mode> [map] [team1 team2]`, names as in `!mode`/`!setmap`; a map or factions not given are random (a map from the mode's pool, two different factions), except for modes with `factions = fixed` (groupfight) |
+| `start` | `<mode> [map] [team1 team2]`, names as in `!mode`/`!setmap`; a map or factions not given are random (a map from the mode's pool, two different factions), except for modes with `factions = fixed` (groupfight, groupduel) |
 | `option.<Option>` | any other game option, as is (`option.RoundTimeLimit = 600`) |
 | `profile` | the instance's profile (in its own settings) |
 | `intermission_seconds`, `post_match_seconds` | MPManager timing (live) |

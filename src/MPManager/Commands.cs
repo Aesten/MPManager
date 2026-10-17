@@ -32,6 +32,7 @@ internal static class Commands
         new Command("mode", "[mode] [map]", "Show the modes, or switch to one (optionally on a map) and restart.", admin: true, SwitchMode),
         new Command("bots", "[team1 team2]", "Show or set the number of bots per team (modes with bots only, e.g. tdm).", admin: true, Bots),
         new Command("specs", "", "List the spectators.", admin: false, Specs),
+        new Command("players", "", "Everyone on the server with their numbers, which commands take instead of names (!kick 17).", admin: false, Players),
         new Command("ready", "", "Skirmish/Battle warmup: your team is ready. When both teams are ready within 60 s, warmup ends (30 s).", admin: false, Ready),
         new Command("notready", "", "Take back your team's !ready, or cancel the countdown it started.", admin: false, NotReady),
         new Command("setmap", "<map> [team1 team2]", "Switch to a map (and cultures) and restart. Partial or misspelled names, numbers from !maps, and current (c) for the same map work.", admin: true, SetMap),
@@ -517,7 +518,8 @@ internal static class Commands
         KickNow(caller, pending.Target);
     }
 
-    // The connected player whose name matches best (see Matcher), or null with the reason in error.
+    // The connected player a command names: their number ("17" or "#17", see !players and PlayerNumIds), else the
+    // name that matches best (see Matcher); null with the reason in error.
     private static NetworkCommunicator FindPlayer(string name, out string error)
     {
         List<NetworkCommunicator> players = Peers.Players();
@@ -526,9 +528,38 @@ internal static class Commands
             error = "Nobody is on the server.";
             return null;
         }
-        List<Choice> choices = players.Select((p, i) => new Choice(i.ToString(), p.UserName)).ToList();
-        Choice choice = Matcher.Resolve(name, choices, out error);
-        return choice == null ? null : players[int.Parse(choice.Id)];
+        string digits = name.StartsWith("#") ? name.Substring(1) : name;
+        if (digits.Length > 0 && digits.All(char.IsDigit) && int.TryParse(digits, out int number))
+        {
+            NetworkCommunicator numbered = players.FirstOrDefault(p => PlayerNumIds.Of(p) == number);
+            error = numbered == null ? "Nobody here has number " + number + " (!players lists them)." : null;
+            return numbered;
+        }
+        // Each choice's id is the player's number, so "matches Aesten (17), ..." shows what to type; numbers never
+        // pick by position in this list.
+        List<Choice> choices = players.Select((p, i) => new Choice(PlayerNumIds.Of(p)?.ToString() ?? "-" + i, p.UserName)).ToList();
+        Choice choice = Matcher.Resolve(name, choices, out error, numbered: new List<Choice>());
+        return choice == null ? null : players[choices.IndexOf(choice)];
+    }
+
+    // !players: everyone with their number, a few per line so long names don't run off the chat box.
+    private static void Players(Caller caller, string[] args)
+    {
+        List<string> names = Peers.Players()
+            .Where(p => p.IsSynchronized)
+            .Select(p => (Number: PlayerNumIds.Of(p), Name: p.UserName))
+            .OrderBy(p => p.Number ?? int.MaxValue)
+            .Select(p => p.Number is int n ? "#" + n + " " + p.Name : p.Name)
+            .ToList();
+        if (names.Count == 0)
+        {
+            caller.Reply("Nobody is on the server.");
+            return;
+        }
+        for (int i = 0; i < names.Count; i += 6)
+        {
+            caller.Reply(string.Join(", ", names.Skip(i).Take(6)));
+        }
     }
 
     // The player's agent if they're alive in the mission, or null with the reason in error.
