@@ -71,6 +71,15 @@ internal static class MissionFlow
             if (_optionsSynced != mission)
             {
                 _optionsSynced = mission;
+                // First: players' battle stats are created with the registered game type (RegisteredGame).
+                try
+                {
+                    RegisteredGame.Sync();
+                }
+                catch (System.Exception e)
+                {
+                    MPManagerSubModule.Log("Could not update the registered game: " + e.Message);
+                }
                 SyncOptions();
             }
             ShortenPostMatch(mission);
