@@ -10,15 +10,33 @@ namespace MPManager;
 // control socket answers "@status" with it. Built on the main thread (CommandInput.Tick).
 //
 //   name, mode, gametype, map (id), map_name (display name), team1, team2 (culture ids), max_players,
-//   state: standby (empty, nothing loaded) | intermission (between missions) | warmup | warmup_ending (counting down
-//          to the match) | playing | ending (scoreboard),
+//   state: starting (the game has no options yet: every other field null) | standby (empty, nothing loaded) |
+//          intermission (between missions) | warmup | warmup_ending (counting down to the match) | playing |
+//          ending (scoreboard),
 //   players: [{ name, id (platform id, "2.0.0.<steam id>"), team: attacker | defender | spectator | none, admin }]
 internal static class Status
 {
     public const string Request = "@status";
 
+    // MultiplayerOptions' singleton is created by the game once its game types are known; asking for it earlier (an
+    // "@status" while the server starts) throws a NullReferenceException in its constructor, which ends a server
+    // without sigkeep (TaleWorlds' signal handlers). Until the game has made it: state "starting", nothing else read.
+    private static readonly System.Reflection.FieldInfo OptionsInstance = typeof(MultiplayerOptions)
+        .GetField("_instance", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+
+    internal static bool OptionsReady => OptionsInstance == null || OptionsInstance.GetValue(null) != null;
+
     public static string Json()
     {
+        if (!OptionsReady)
+        {
+            return JsonSerializer.Serialize(new Dictionary<string, object>
+            {
+                ["name"] = null, ["mode"] = null, ["gametype"] = null, ["map"] = null, ["map_name"] = null,
+                ["team1"] = null, ["team2"] = null, ["max_players"] = null, ["state"] = "starting",
+                ["players"] = new List<object>(),
+            });
+        }
         string map = MultiplayerOptions.OptionType.Map.GetStrValue();
         var status = new Dictionary<string, object>
         {

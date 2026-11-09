@@ -145,6 +145,13 @@ internal static class CommandInput
                 request.Done.Set();
                 continue;
             }
+            if (!Status.OptionsReady)
+            {
+                // Commands read the game's options, which don't exist yet (Status.OptionsReady).
+                request.Reply = new List<string> { "The server is still starting: try again in a few seconds." };
+                request.Done.Set();
+                continue;
+            }
             MPManagerSubModule.Log("> " + request.Command);
             string chatCommand = ChatInterceptor.IsCommand(request.Command) ? request.Command
                 : Commands.IsKnown(request.Command.Split(' ')[0]) ? "!" + request.Command
