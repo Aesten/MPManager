@@ -155,8 +155,10 @@ else comes from the modes.
 
 **Standby.** Once nobody has been on the server for 60 s, the mission ends and the server waits between
 missions with nothing loaded (no bots fighting each other), by holding the intermission countdown. When
-someone joins, the next mission starts a second later, in warmup. A fresh server starts in Skirmish warmup and
-goes to standby after 60 s without players.
+someone joins, the next mission starts a second later, in warmup. A fresh server goes straight to standby: it
+holds the very first intermission while nobody is on, so no mission is ever loaded until the first player joins
+(until then the server ticks at ~64 Hz, the engine's rate before any mission: `/tickrate` applies when a mission
+opens).
 
 **Aliases** are defined in `aliases.txt` (re-read when it changes, no restart): `sm = setmap` makes `!sm lighthouse` run `!setmap lighthouse`, and an alias
 can carry arguments (`ewf = endwarmup --force`). The Aliases column above lists the defaults from that file;

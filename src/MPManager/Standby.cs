@@ -13,7 +13,8 @@ namespace MPManager;
 // the server waits between missions, with nothing loaded (no bots fighting, no scene), by holding the
 // intermission countdown (ServerSideIntermissionManager counts down to the next mission in CountingForNextBattle).
 // When someone joins, the countdown is let go and the next mission starts after the usual intermission
-// (settings.txt), in warmup.
+// (settings.txt), in warmup. Between missions with nobody on, the countdown is held at once (no grace): a fresh server
+// stands by from its start and loads no mission until the first player joins.
 internal static class Standby
 {
     private const double EmptyGraceSeconds = 60;

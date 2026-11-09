@@ -187,7 +187,9 @@ check.
 TCP, in ufw (the `Bannerlord` profile, `sudo ufw status`) and forwarded by the router.
 
 **An empty server shows "standby".** That's normal: after 60 s with nobody on, it ends the mission and waits with
-nothing loaded. The next mission starts when someone joins.
+nothing loaded. A fresh server stands by from its start (no mission until the first join). The next mission starts
+when someone joins. Until a first mission has opened, the server's metrics show ~64 Hz instead of its tick rate (the
+engine applies `/tickrate` when a mission opens); 64 Hz *with players on* means a mission failed to open.
 
 ## Files on the server
 
