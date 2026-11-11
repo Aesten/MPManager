@@ -35,7 +35,15 @@ internal static class RegisteredGame
         }
         string uniqueMapId = Utilities.TryGetUniqueIdentifiersForScene(map, out UniqueSceneId ids) ? ids.Serialize() : null;
         string was = server.CustomGameType + " on " + server.CustomGameScene;
-        server.UpdateGameProperties(gameType, map, uniqueMapId);
+        // v1.5.7: the streamer slots and password go with it, as the game's own update sends them (its handler keeps the
+        // password's MD5 in the option once sent: a 32-hex value is that hash already).
+        string streamerPassword = MultiplayerOptions.OptionType.StreamerPassword.GetStrValue(current);
+        if (!string.IsNullOrEmpty(streamerPassword) && !System.Text.RegularExpressions.Regex.IsMatch(streamerPassword, "^[0-9a-f]{32}$"))
+        {
+            streamerPassword = Common.CalculateMD5Hash(streamerPassword);
+        }
+        server.UpdateGameProperties(gameType, map, uniqueMapId, MultiplayerOptions.OptionType.MaxStreamerCount.GetIntValue(current),
+            string.IsNullOrEmpty(streamerPassword) ? null : streamerPassword);
         MPManagerSubModule.Log("Registered game updated: " + was + " -> " + gameType + " on " + map + ".");
     }
 }

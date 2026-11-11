@@ -10,7 +10,8 @@ namespace MPManager;
 // A healthy keepalive (every 2 s) prints four lines: "Http Post Request to ...", "Protocol version used for post
 // request to ...", and "ClientRestSessionTask::SetFinishedAsSuccessful::...AliveMessage" with and without " done".
 // The first two are printed for every lobby request, so they are dropped for all of them; retries and failures
-// print other lines and stay visible.
+// print other lines and stay visible. v1.5.7 adds two lines per keepalive, "[AliveChannel] Firing AliveMessage ..." and
+// "[AliveChannel] Polled — timer reset. ...", dropped too; its retries and failures print "[Resilience]" lines.
 internal sealed class LogFilter : IDebugManager
 {
     private readonly IDebugManager _inner;
@@ -33,7 +34,11 @@ internal sealed class LogFilter : IDebugManager
         return message != null
             && (message.StartsWith("Http Post Request to ")
                 || message.StartsWith("Protocol version used for post request to ")
-                || message.StartsWith("ClientRestSessionTask::SetFinishedAsSuccessful::TaleWorlds.Diamond.Rest.AliveMessage"));
+                || message.StartsWith("Protocol version used for get request to ")
+                || message.StartsWith("ClientRestSessionTask::SetFinishedAsSuccessful::TaleWorlds.Diamond.Rest.AliveMessage")
+                // v1.5.7's lobby client: two more lines per healthy keepalive ("Polled=false" and failures stay)
+                || message.StartsWith("[AliveChannel] Firing AliveMessage ")
+                || message.StartsWith("[AliveChannel] Polled \u2014 timer reset."));
     }
 
     // Printed many times per player and mission, or at every startup, with nothing to act on. Lobby failures and
@@ -42,6 +47,8 @@ internal sealed class LogFilter : IDebugManager
     {
         "ClientRestSessionTask::SetFinishedAsSuccessful::", // lobby request done
         "ClientRestSessionTask::WaitUntilFinished::",
+        "[AliveChannel] Main-channel response complete ",   // v1.5.7: after every lobby request
+        "[SessionMessages] Delivered ",                      // v1.5.7: the lobby's messages (players joining) handed on
         "HasSpawnedAgentVisuals = false for peer: ",        // every equipment change
         ">#< Can't send the info of ",                       // player sync on joining a mission, with the 4 below
         "isDisconnectedPeer: ",

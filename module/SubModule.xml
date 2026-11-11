@@ -8,8 +8,8 @@
   <ModuleCategory value="Server"/>
   <ModuleType value="Community"/>
   <DependedModules>
-    <DependedModule Id="Native" DependentVersion="v1.4.8" Optional="false"/>
-    <DependedModule Id="Multiplayer" DependentVersion="v1.4.8" Optional="false"/>
+    <DependedModule Id="Native" DependentVersion="v1.5.7" Optional="false"/>
+    <DependedModule Id="Multiplayer" DependentVersion="v1.5.7" Optional="false"/>
   </DependedModules>
   <SubModules>
     <SubModule>
